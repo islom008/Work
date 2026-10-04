@@ -31,8 +31,6 @@ button,input{font:inherit}
 .tb-spacer{flex:1}
 .tb-progress{font-size:13px;color:var(--muted)}
 .tb-progress b{color:var(--ink)}
-.timer{font-variant-numeric:tabular-nums;font-weight:700;font-size:15px;padding:5px 12px;border:1px solid var(--line);border-radius:6px;min-width:84px;text-align:center}
-.timer.low{color:#fff;background:var(--red);border-color:var(--red)}
 .btn{border:0;border-radius:6px;padding:8px 16px;cursor:pointer;font-weight:700;font-size:14px}
 .btn-red{background:var(--red);color:#fff}
 .btn-red:hover{background:var(--red-dark)}
@@ -175,7 +173,6 @@ button,input{font:inherit}
       <button type="button" id="zoom-in" title="Zoom in (bigger text)" aria-label="Zoom in">+</button>
     </div>
     <button class="btn btn-ghost" id="hl-btn" type="button" title="Select any text, then press to highlight (or press H)">Highlight</button>
-    <span class="timer" id="timer" aria-live="polite">20:00</span>
     <button class="btn btn-red" id="submit-top" type="button">Submit</button>
   </div>
 </div>
@@ -347,26 +344,14 @@ button,input{font:inherit}
   document.getElementById('questions').addEventListener('input', updateCount);
   document.getElementById('questions').addEventListener('change', updateCount);
 
-  // ---- timer ----
-  let remaining = 20*60, timerId = null, submitted = false;
-  function fmt(s){ const m = Math.floor(s/60), r = s%60; return String(m).padStart(2,'0')+':'+String(r).padStart(2,'0'); }
-  function tick(){
-    remaining--;
-    $('timer').textContent = fmt(Math.max(0,remaining));
-    $('timer').classList.toggle('low', remaining <= 120);
-    if (remaining <= 0){ clearInterval(timerId); submit(true); }
-  }
-  function startTimer(){ clearInterval(timerId); remaining = 20*60; $('timer').textContent = fmt(remaining); $('timer').classList.remove('low'); timerId = setInterval(tick, 1000); }
+  let submitted = false;
 
   // ---- submit ----
-  function submit(auto){
+  function submit(){
     if (submitted) return;
-    if (!auto){
-      const left = 13 - ALL.filter(q => getAnswer(q) !== '').length;
-      if (left > 0 && !confirm(`You have ${left} unanswered question${left>1?'s':''}. Submit anyway?`)) return;
-    }
+    const left = 13 - ALL.filter(q => getAnswer(q) !== '').length;
+    if (left > 0 && !confirm(`You have ${left} unanswered question${left>1?'s':''}. Submit anyway?`)) return;
     submitted = true;
-    clearInterval(timerId);
     let score = 0;
     const rows = ALL.map(q => {
       const a = getAnswer(q), ok = isCorrect(q, a);
@@ -385,25 +370,25 @@ button,input{font:inherit}
     $('key-b').innerHTML = rows.slice(7).join('');
     document.querySelectorAll('#questions input, #questions select').forEach(i => i.disabled = true);
     $('score').textContent = score;
-    $('score-title').textContent = auto ? "Time is up — your answers were submitted." : "Test submitted.";
+    $('score-title').textContent = "Test submitted.";
     $('score-msg').textContent = score >= 11 ? "Excellent work!" : score >= 8 ? "Good effort — review the ones you missed." : "Keep practising — check the answer key and find each answer in the passage.";
     $('submit-top').disabled = true; $('submit-top').style.opacity = .5;
     $('submit-bottom').parentElement.hidden = true;
     $('results').hidden = false;
     $('results').scrollIntoView({behavior:'smooth', block:'start'});
   }
-  $('submit-top').onclick = () => submit(false);
-  $('submit-bottom').onclick = () => submit(false);
+  $('submit-top').onclick = () => submit();
+  $('submit-bottom').onclick = () => submit();
   $('review-btn').onclick = () => $('test-area').scrollIntoView({behavior:'smooth'});
   $('retry-btn').onclick = () => {
-    if (!confirm('Clear all answers and restart the timer?')) return;
+    if (!confirm('Clear all answers and start again?')) return;
     submitted = false;
     document.querySelectorAll('#questions input, #questions select').forEach(i => { i.disabled = false; if (i.type === 'radio') i.checked = false; else i.value = ''; });
     document.querySelectorAll('.q-row').forEach(r => { r.classList.remove('correct','wrong'); const f = r.querySelector('.feedback'); if (f) f.remove(); });
     $('results').hidden = true;
     $('submit-top').disabled = false; $('submit-top').style.opacity = 1;
     $('submit-bottom').parentElement.hidden = false;
-    updateCount(); startTimer();
+    updateCount();
     window.scrollTo({top:0, behavior:'smooth'});
   };
 
@@ -499,7 +484,6 @@ button,input{font:inherit}
     if (!submitted && ALL.some(q => getAnswer(q) !== '')) { e.preventDefault(); e.returnValue = ''; }
   });
 
-  startTimer();
 })();
 </script>
 </body>
