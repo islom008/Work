@@ -139,9 +139,11 @@ button,input{font:inherit}
 
 /* ---------- presenter focus: the side under the mouse stays clear, the other fades ---------- */
 @media (hover:hover) and (pointer:fine){
-  .pane{transition:opacity .25s ease}
-  .split:hover .pane{opacity:.45}
-  .split .pane:hover{opacity:1}
+  /* a white veil fades the inactive side; highlights sit above it so they stay unchanged */
+  .passage,#questions{position:relative}
+  .passage::after,#questions::after{content:"";position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:1;transition:opacity .25s ease}
+  .split:hover .pane:not(:hover) .passage::after,.split:hover #questions:not(:hover)::after{opacity:.55}
+  .sheet mark{position:relative;z-index:2}
   .passage p:not(.para-label):not(.hl-tip),.q-row:not(.correct):not(.wrong){border-radius:4px;transition:background-color .15s ease,box-shadow .15s ease}
   .passage p:not(.para-label):hover,.q-row:not(.correct):not(.wrong):hover{background:#f3f4f6;box-shadow:0 0 0 6px #f3f4f6}
 }
