@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Video Passage 1 – IELTS Reading</title>
+<title>Passage 1 – IELTS Reading</title>
 <style>
 :root{
   --red:#e31e24;
@@ -154,7 +154,7 @@ button,input{font:inherit}
 
 <div class="testbar">
   <div class="testbar-inner">
-    <span class="tb-title">Video Passage 1 · Reading</span>
+    <span class="tb-title">Passage 1 · Reading</span>
     <span class="tb-spacer"></span>
     <span class="tb-progress"><b id="answered">0</b> / 13 answered</span>
     <div class="zoom" role="group" aria-label="Text size">
@@ -170,11 +170,11 @@ button,input{font:inherit}
 
 <div class="wrap">
   <div class="sheet">
-    <div class="running-head">VIDEO PASSAGE 1</div>
+    <div class="running-head">PASSAGE 1</div>
 
     <div class="hero">
       <div>
-        <h1>Video Passage 1</h1>
+        <h1>Passage 1</h1>
         <div class="sub">Questions 1–13</div>
       </div>
       <div class="right">
@@ -261,7 +261,7 @@ button,input{font:inherit}
       </div>
     </div>
 
-    <div class="page-foot">IELTS Reading Practice · Video Passage 1</div>
+    <div class="page-foot">IELTS Reading Practice · Passage 1</div>
   </div>
 </div>
 
@@ -463,7 +463,7 @@ button,input{font:inherit}
   // ---- zoom (text size) ----
   const ZMIN = 0.7, ZMAX = 2, ZSTEP = 0.1;
   let zoom = 1;
-  try { const z = parseFloat(localStorage.getItem('vp1-zoom')); if (z >= ZMIN && z <= ZMAX) zoom = z; } catch (_) {}
+  try { const z = parseFloat(localStorage.getItem('p1-zoom')); if (z >= ZMIN && z <= ZMAX) zoom = z; } catch (_) {}
   function setZoom(z){
     zoom = Math.round(Math.min(ZMAX, Math.max(ZMIN, z)) * 10) / 10;
     document.documentElement.style.setProperty('--z', zoom);
@@ -471,7 +471,7 @@ button,input{font:inherit}
     $('zoom-out').disabled = zoom <= ZMIN;
     $('zoom-in').disabled = zoom >= ZMAX;
     pop.hidden = true;
-    try { localStorage.setItem('vp1-zoom', zoom); } catch (_) {}
+    try { localStorage.setItem('p1-zoom', zoom); } catch (_) {}
   }
   $('zoom-in').onclick = () => setZoom(zoom + ZSTEP);
   $('zoom-out').onclick = () => setZoom(zoom - ZSTEP);
