@@ -69,3 +69,18 @@ The map is built from layers: textured grass, a river, 3D trees and castles, clo
 
 The drawn terrain and trees switch off, and the road, lesson stops, pins, boss and locks still sit on top. If the painting has its own road, move the points in `ROAD`, `LESSON_PTS`, `BOSS_PT` and `LOCK_PTS` (same file) to match. They use a 390 × 900 grid.
 
+## Coursebooks and classes
+
+`courses.js` holds the books taught at RESULT English School:
+
+| Course | Level | Lessons per unit | One class (= one homework) |
+|---|---|---|---|
+| Navigate | Beginner (A1) | x.1–x.3, x.4 Speaking and writing, x.5 Video | 1.1–1.2, 1.3–1.4, 1.5 |
+| Solutions 3rd ed. | Elementary, Pre-Intermediate, Intermediate, Upper-Intermediate | A Vocabulary, B Grammar, C Listening, D Grammar, E Word Skills, F Reading, G Speaking, H Writing | 1A + 1B, 1C + 1D, 1E + 1F, 1G + 1H |
+
+The teacher's **Homework** tab picks a unit and a class; the tasks fill in from the two lessons (e.g. 5G Speaking → "record your answers", 5H Writing → "writing task") and can be edited before sending.
+Unit titles were taken from the books' contents pages. Some are not confirmed yet (Navigate units 3–10, Solutions Elementary units 5–9) and show as "Unit n"; fill them in `courses.js` from your copy.
+
+## Fair battles for any group size
+
+Groups range from 2 to 20 students and study different levels, so a battle is scored as a **share of each group's own potential**: if every student finished every homework of the week fully (★★, on time), the group would deal exactly 1,000 HP. A group of 2 and a group of 17, or an Upper-Intermediate and an Intermediate group, can then fight fairly. In battles, bonuses can raise one homework to at most +60% of its normal maximum, so one student in a tiny group can't win alone. Points, rewards and boss damage keep the full bonuses. In the prototype, **Profile → ⚙️ → Group size** restarts the demo with 2–20 students.

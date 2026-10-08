@@ -11,12 +11,12 @@
   const STUDENT_ONLY = !!window.UQ_STUDENT_ONLY;
 
   // ---------------------------------------------------------------- storage
-  const STORE = 'uplingo-quest-v3';
+  const STORE = 'uplingo-quest-v4';
   const loadState = () => {
     try {
       const s = JSON.parse(localStorage.getItem(STORE));
       // A battle that ended while the demo was closed starts a fresh demo week.
-      if (s && s.version === 3 && Date.now() < s.battle.endsAt) return s;
+      if (s && s.version === 4 && Date.now() < s.battle.endsAt) return s;
     } catch (e) { /* storage blocked: fall through to a fresh seed */ }
     return G.seed();
   };
@@ -49,6 +49,7 @@
   const TYPE_NAME = { vocab: 'vocabulary', grammar: 'grammar', writing: 'writing', speaking: 'speaking', listening: 'listening', reading: 'reading' };
   const SEG_CLS = { 'Full': 'on-full', '75%': 'on-most', '50%': 'on-half', 'Not full': 'on-notfull' };
   const isMarked = (st) => st && st !== 'Not started' && st !== 'Not full';
+  const unitName = (s, n) => ((s.units.find((u) => u.unit === n) || {}).name) || 'Unit ' + n;
 
   // Everything screens derive from state, computed once per render.
   const derive = (s, now) => {
@@ -62,6 +63,9 @@
     const enemyHP = Math.max(0, G.FORTRESS_HP - battle.base.us - landed('us'));
     const pendingOnEnemy = feed.filter((f) => f.side === 'us' && f.pending).reduce((a, f) => a + f.dmg, 0);
     const notAttacked = myGuild.members.length - attackers;
+    // Battle damage is a share of each side's weekly potential (see game.js).
+    const myMax = G.weeklyMax(myGuild.members.length, battle.perStudent);
+    const enemyMax = G.weeklyMax(enemy.members.length, enemy.perStudent);
     const liveBoss = bosses.filter((b) => !b.defeated).sort((a, b) => a.unit - b.unit)[0] || null;
     const currentUnit = liveBoss ? liveBoss.unit : Infinity;
     const locked = (hw) => hw.unit > currentUnit;
@@ -74,7 +78,7 @@
     const unitPct = unitHws.length ? pct(doneInUnit + curFrac, unitHws.length) : 100;
     const unit = s.units.find((u) => u.unit === currentUnit) || s.units[s.units.length - 1];
     return {
-      enemy, attackers, myShield, enemyShield, usHP, enemyHP, pendingOnEnemy, notAttacked, liveBoss, currentUnit, locked,
+      enemy, myMax, enemyMax, attackers, myShield, enemyShield, usHP, enemyHP, pendingOnEnemy, notAttacked, liveBoss, currentUnit, locked,
       unitHws, nextHw, lessonIdx, doneInUnit, unitPct, unit, lvl: G.levelProgress(me.xp), rank: G.rankFor(me.seasonPts),
       pendingQueue: s.submissions.filter((x) => x.state === 'pending'), battleLeft: battle.endsAt - now,
       unitsDone: s.units.filter((u) => u.unit < currentUnit).length,
@@ -177,9 +181,7 @@
     const L = A.LESSON_PTS, B = A.BOSS_PT, LK = A.LOCK_PTS;
     const at = ([x, y]) => ({ left: (x / A.MAP_W) * 100 + '%', top: (y / A.MAP_H) * 100 + '%' });
     const hws = d.unitHws;
-    const states = L.map((_, i) => {
-      const hw = hws[i];
-      if (!hw) return 'todo';
+    const states = hws.slice(0, L.length).map((hw) => {
       if (s.me.submitted[hw.id]) return 'done';
       return d.nextHw && d.nextHw.id === hw.id ? 'current' : 'todo';
     });
@@ -197,13 +199,13 @@
         h(WorldTerrain, { states, bossAlive: !!d.liveBoss }),
         h('div', { className: 'map-ov' },
           h('button', { className: 'map-card', style: at([300, 150]), onClick: goHomework },
-            h('div', { className: 'grow' }, h('div', { className: 't' }, 'Unit ' + d.unit.unit), h('div', { className: 's', style: { color: '#E6E9F2' } }, d.unit.name), h('div', { className: 's' }, d.doneInUnit + '/' + hws.length + ' lessons')),
+            h('div', { className: 'grow' }, h('div', { className: 't' }, 'Unit ' + d.unit.unit), h('div', { className: 's', style: { color: '#E6E9F2' } }, d.unit.name), h('div', { className: 's' }, d.doneInUnit + '/' + hws.length + ' classes done')),
             h('span', { style: { color: 'var(--text-2)' } }, h(Icon, { n: 'chevR', s: 18 }))),
-          L.map((p, i) => hws[i] && h('button', { key: 'n' + i, className: 'node-hit', style: at(p), onClick: () => openHw(hws[i].id), 'aria-label': 'Lesson ' + (i + 1) + ': ' + hws[i].title })),
+          L.map((p, i) => hws[i] && h('button', { key: 'n' + i, className: 'node-hit', style: at(p), onClick: () => openHw(hws[i].id), 'aria-label': 'Class ' + hws[i].label + ': ' + hws[i].title })),
           L.map((p, i) => {
             const list = byLesson(i);
             if (!list.length || (i === myIdx && d.nextHw)) return null;
-            const off = i % 2 ? -42 : 42;
+            const off = [42, -42, -48, 42, -42][i] || 42;
             return h('div', { key: 'p' + i, className: 'pin', style: { left: `calc(${at(p).left} + ${off}px)`, top: `calc(${at(p).top} + 4px)` } },
               h('div', { className: 'face' }, h(Face, { face: list[0].face, size: 38 })),
               h('div', { className: 'tip' }),
@@ -227,7 +229,7 @@
     const audio = s.me.audio[hw.id] || {};
     const sub = s.me.submitted[hw.id];
     const est = G.calcDamage({ hw, statuses: sts, audio, submittedAt: now, streak: s.me.streak });
-    const fortress = G.fortressDamage(est.total, s.myGuild.members.length, d.enemyShield);
+    const fortress = G.fortressDamage(est.total, d.myMax, d.enemyShield, hw);
     const anyDone = sts.some(isMarked);
     const completed = s.homeworks.filter((x) => s.me.submitted[x.id]);
     const upcoming = s.homeworks.filter((x) => !s.me.submitted[x.id] && x.id !== (d.nextHw && d.nextHw.id));
@@ -242,8 +244,9 @@
           h('div', { className: 'hero' },
             h(Mountains),
             h('div', { className: 'content' },
-              h('div', { style: { color: '#D8DDF0', fontSize: 13.5 } }, 'Unit ' + hw.unit + ' · Lesson ' + hw.lesson),
-              h('div', { className: 'h1', style: { margin: '4px 0 10px' } }, hw.title),
+              h('div', { style: { color: '#D8DDF0', fontSize: 13.5 } }, 'Unit ' + hw.unit + ' · ' + unitName(s, hw.unit)),
+              h('div', { className: 'h1', style: { margin: '4px 0 2px' } }, hw.label),
+              h('div', { style: { color: '#D8DDF0', fontSize: 13.5, marginBottom: 10 } }, hw.title),
               h('span', { className: 'badge', style: { background: 'rgba(10,17,32,0.55)', color: '#E6E9F2', padding: '5px 10px' } },
                 h(Icon, { n: 'clock', s: 13 }), hw.dueAt < now ? 'Overdue' : fmtLeft(hw.dueAt - now) + ' left'))),
           h('div', { className: 'list' },
@@ -282,7 +285,7 @@
             const ok = s.me.submitted[x.id] === 'verified';
             return h('button', { key: x.id, className: 'item', onClick: () => { setHwSel(x.id); setTab('current'); } },
               h('div', { className: cx('ck', ok ? 'on' : 'part') }, ok ? h(Icon, { n: 'check', s: 16, w: 3 }) : '⏳'),
-              h('div', { className: 'grow' }, h('div', { className: 't' }, x.title), h('div', { className: 's' }, 'Unit ' + x.unit + ' · Lesson ' + x.lesson + (sx && sx.dmg ? ' · ' : ''), sx && sx.dmg ? h('span', { className: 'dmg' }, sx.dmg + ' damage') : null)),
+              h('div', { className: 'grow' }, h('div', { className: 't' }, x.label + ' · ' + x.title), h('div', { className: 's' }, 'Unit ' + x.unit + ' · ' + unitName(s, x.unit) + (sx && sx.dmg ? ' · ' : ''), sx && sx.dmg ? h('span', { className: 'dmg' }, sx.dmg + ' damage') : null)),
               h('span', { className: 'muted' }, h(Icon, { n: 'chevR', s: 20 })));
           }) : h('div', { className: 'item muted' }, 'Nothing yet')),
         tab === 'upcoming' && h('div', { className: 'list' },
@@ -290,7 +293,7 @@
             const lk = d.locked(x);
             return h('button', { key: x.id, className: 'item', style: { opacity: lk ? 0.55 : 1 }, onClick: () => { setHwSel(x.id); setTab('current'); } },
               h('div', { className: 'ico' }, h(Icon, { n: lk ? 'lock' : 'clock', s: 22 })),
-              h('div', { className: 'grow' }, h('div', { className: 't' }, x.title), h('div', { className: 's' }, 'Unit ' + x.unit + ' · Lesson ' + x.lesson + ' · ' + (lk ? 'locked' : 'due in ' + fmtLeft(x.dueAt - now)))),
+              h('div', { className: 'grow' }, h('div', { className: 't' }, x.label + ' · ' + x.title), h('div', { className: 's' }, 'Unit ' + x.unit + ' · ' + unitName(s, x.unit) + ' · ' + (lk ? 'locked' : 'due in ' + fmtLeft(x.dueAt - now)))),
               h('span', { className: 'muted' }, h(Icon, { n: 'chevR', s: 20 })));
           }))));
   };
@@ -342,7 +345,10 @@
           h('div', { className: 'row tiny', style: { marginTop: 8, color: '#C9D0DC' } },
             h('span', null, '🛡️ Shield ' + Math.round(d.myShield * 100) + '%'),
             h('span', { className: 'grow', style: { textAlign: 'center', color: 'var(--gold)' } }, d.pendingOnEnemy > 0 ? '⏳ ' + d.pendingOnEnemy + ' pending' : ''),
-            h('span', null, 'Shield ' + Math.round(d.enemyShield * 100) + '% 🛡️')))),
+            h('span', null, 'Shield ' + Math.round(d.enemyShield * 100) + '% 🛡️')),
+          h('div', { className: 'tiny', style: { marginTop: 10, color: '#C9D0DC', textAlign: 'center', lineHeight: 1.5 } },
+            s.myGuild.members.length + ' students · ' + s.myGuild.level + '  vs  ' + d.enemy.members.length + ' students · ' + d.enemy.level,
+            h('br'), 'Fair fight: each group is scored on how much of its own homework it completes.'))),
       h('div', { className: 'page' },
         d.notAttacked > 0 && h('div', { className: 'card tiny', style: { borderColor: 'rgba(229,56,59,0.4)', color: '#FFC2C2' } },
           h('b', null, d.notAttacked + ' teammates haven\'t attacked yet.'), ' Every attacker raises the shield, so the Dragons hit softer.'),
@@ -394,7 +400,7 @@
           h('div', { className: 'list' }, s.battle.history.map((x, i) => h('div', { key: i, className: 'item' },
             h(Badge, { k: x.won ? 'b-green' : 'b-red' }, x.won ? 'WON' : 'LOST'),
             h('div', { className: 'grow t' }, 'vs ' + x.vs),
-            h('div', { className: 'tiny muted num' }, fmt(x.us) + ' – ' + fmt(x.them))))),
+            h('div', { className: 'tiny muted num' }, x.us + '% – ' + x.them + '%')))),
           h(SectionHead, { title: '1v1 Duel' }),
           h('div', { className: 'card row' },
             h('div', { style: { fontSize: 30 } }, '🤺'),
@@ -432,7 +438,7 @@
         h('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 } },
           h(MeAvatar, { s, size: 92, crown: true }),
           h('div', { className: 'h1', style: { marginTop: 8 } }, me.name),
-          h('div', { style: { color: '#D2D8E6' } }, s.course.name + ' · ' + s.myGuild.name),
+          h('div', { style: { color: '#D2D8E6' } }, s.course.level + ' · ' + s.myGuild.name),
           h('div', { className: 'tiny', style: { color: 'var(--gold)', fontWeight: 600 } }, '“' + me.title + '”')),
         h('div', { className: 'tiles' },
           h('div', { className: 'tile' }, h('div', { className: 'k' }, 'Level'), h('div', { className: 'v' }, h(Emo, { v: 'star', size: 26 }), d.lvl.lvl)),
@@ -475,7 +481,7 @@
     return h(Sheet, { onClose },
       h('div', { className: 'row', style: { marginBottom: 16 } },
         h('div', { style: { width: 52, height: 52, borderRadius: 14, background: 'var(--surface-2)', display: 'grid', placeItems: 'center', color: 'var(--cream)' } }, h(Icon, { n: TYPE_ICON[t.type], s: 28, w: 1.8 })),
-        h('div', { className: 'grow' }, h('div', { className: 'tiny muted' }, 'Unit ' + hw.unit + ' · Lesson ' + hw.lesson + ' · ' + hw.title), h('div', { className: 'h2' }, t.label),
+        h('div', { className: 'grow' }, h('div', { className: 'tiny muted' }, 'Unit ' + hw.unit + ' · ' + hw.label + ' · ' + hw.title), h('div', { className: 'h2' }, t.label),
           h('div', { className: 'dmg tiny' }, '+' + G.DAMAGE[t.type] + ' damage when Full'))),
       h('div', { className: 'eyebrow', style: { marginBottom: 8 } }, ro ? 'Submitted' : 'How much did you finish?'),
       h('div', { className: 'seg', style: ro ? { opacity: 0.55 } : null },
@@ -497,7 +503,7 @@
         ['Early Strike (24h+ before deadline)', '×1.5'], ['Teacher rates 3★ (Critical Hit)', '×2'], ['Teacher rates 1★', '×0.5'], ['Streak of 3+', '+10%'], ['Late submission', '×0.5']]
         .map(([a, b], i) => h('div', { key: i, className: 'item' }, h('div', { className: 'grow' }, a), h('b', { style: { color: 'var(--gold)' } }, b)))),
     h('div', { className: 'tiny muted', style: { marginTop: 12, lineHeight: 1.5 } },
-      'Damage is pending until your teacher checks the work. Every teammate who attacks raises the guild shield, so the other side hits softer. Scores are adjusted for group size, so a bigger group can\'t win just by having more students.'),
+      'Damage is pending until your teacher checks the work. Each fortress has 1,000 HP. If every student in a group finished every homework of the week fully, the group would deal exactly 1,000, so a group of 2 and a group of 20, or a Beginner group and an Upper-Intermediate group, can fight fairly. In battles, bonuses can raise one homework to at most +60% of its normal maximum. Every teammate who attacks raises the guild shield, so the other side hits softer.'),
     h('button', { className: 'btn gold block', style: { marginTop: 14 }, onClick: onClose }, 'Got it'));
 
   const InfoSheet = ({ title, body, onClose, icon }) => h(Sheet, { onClose },
@@ -646,7 +652,7 @@
         })));
   };
 
-  const SettingsSheet = ({ onClose, teacher, setTeacher, minimal, setMinimal, reset }) => {
+  const SettingsSheet = ({ onClose, teacher, setTeacher, minimal, setMinimal, reset, size, setSize }) => {
     const [sure, setSure] = useState(false);
     return h(Sheet, { onClose },
     h('div', { className: 'h1', style: { marginBottom: 12 } }, 'Settings'),
@@ -655,6 +661,11 @@
         h('button', { className: cx('switch', teacher && 'on'), role: 'switch', 'aria-checked': teacher, 'aria-label': 'Teacher view', onClick: () => setTeacher(!teacher) }, h('span'))),
       h('div', { className: 'item' }, h('div', { className: 'grow' }, h('div', { className: 't' }, 'Minimal mode'), h('div', { className: 's' }, 'Progress and stats with less game decoration')),
         h('button', { className: cx('switch', minimal && 'on'), role: 'switch', 'aria-checked': minimal, 'aria-label': 'Minimal mode', onClick: () => setMinimal(!minimal) }, h('span')))),
+    h('div', { className: 'card', style: { marginTop: 12 } },
+      h('div', { className: 't', style: { fontWeight: 600 } }, 'Group size (demo)'),
+      h('div', { className: 'tiny muted', style: { margin: '2px 0 10px' } }, 'Try the battle with a small or big group. This restarts the demo.'),
+      h('div', { className: 'pill-tabs', style: { flexWrap: 'wrap' } }, [2, 4, 8, 12, 16, 20].map((n) =>
+        h('button', { key: n, className: size === n ? 'on' : '', onClick: () => setSize(n) }, n + ' students')))),
     sure
       ? h('div', { className: 'row', style: { marginTop: 14 } },
         h('button', { className: 'btn ghost grow', onClick: () => setSure(false) }, 'Cancel'),
@@ -690,7 +701,7 @@
       const st = stars[sub.id] || 2;
       const isCrit = st === 3 || !!crit[sub.id];
       const dmg = G.calcDamage({ hw, statuses: sub.statuses, audio: sub.audio, submittedAt: sub.submittedAt, streak: sub.streak, stars: isCrit ? 3 : st });
-      const fort = G.fortressDamage(dmg.total, s.myGuild.members.length, d.enemyShield);
+      const fort = G.fortressDamage(dmg.total, d.myMax, d.enemyShield, hw);
       const m = s.myGuild.members.find((x) => x.id === sub.who);
       return h('div', { key: sub.id, className: 'card' },
         h('div', { className: 'row', style: { marginBottom: 10 } }, h(Face, { face: m.face, size: 40 }),
@@ -750,18 +761,72 @@
         h('button', { className: 'btn gold block', disabled: !name.trim() || hp < 100, onClick: () => { addBoss({ unit, name: name.trim(), icon: 'ogre', hp, dealt: 0, deadline: now + days * 86400000 }); setName(''); } }, 'Create boss')));
   };
 
+  // Homework builder: one homework per class, i.e. two lessons from the group's coursebook.
+  const TYPE_OPTS = ['vocab', 'grammar', 'listening', 'reading', 'speaking', 'writing'];
+  const TeacherHomework = ({ s, now, addHomework }) => {
+    const Cs = window.Courses;
+    const course = Cs.COURSES[s.myGuild.course];
+    const [unit, setUnit] = useState(Math.min(course.units.length, Math.max(1, ...s.homeworks.map((x) => x.unit))));
+    const sessions = Cs.sessionsOf(course, unit);
+    const taken = new Set(s.homeworks.filter((x) => x.unit === unit).map((x) => x.label));
+    const firstFree = Math.max(0, sessions.findIndex((x) => !taken.has(x.label)));
+    const [ses, setSes] = useState(firstFree);
+    const [tasks, setTasks] = useState(() => Cs.defaultTasks(course, unit, sessions[firstFree].lessons));
+    const [days, setDays] = useState(2);
+    const pick = (u, i) => {
+      const list = Cs.sessionsOf(course, u);
+      setUnit(u); setSes(i); setTasks(Cs.defaultTasks(course, u, list[i].lessons));
+    };
+    const cur = sessions[ses];
+    const maxPts = tasks.reduce((a, t) => a + (G.DAMAGE[t.type] || 0), 0) + G.FULL_BONUS;
+    const upcoming = s.homeworks.filter((x) => x.dueAt > now).sort((a, b) => a.dueAt - b.dueAt);
+    return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 12 } },
+      h('div', { className: 'card' },
+        h('div', { className: 'eyebrow' }, s.myGuild.name + ' · ' + s.myGuild.members.length + ' students'),
+        h('div', { className: 'h2', style: { marginTop: 4 } }, course.book + ' ' + course.level + ' (' + course.cefr + ')')),
+      h('div', { className: 'card', style: { display: 'flex', flexDirection: 'column', gap: 12 } },
+        h('label', { className: 'tiny muted', htmlFor: 'hw-unit' }, 'Unit',
+          h('select', { id: 'hw-unit', className: 'field', value: unit, onChange: (e) => pick(+e.target.value, 0), style: { width: '100%', background: 'var(--bg-2)', border: '1px solid var(--border-hi)', borderRadius: 12, padding: '11px 12px', marginTop: 4 } },
+            course.units.map((t, i) => h('option', { key: i, value: i + 1 }, 'Unit ' + (i + 1) + (t ? ' · ' + t : ''))))),
+        h('div', null,
+          h('div', { className: 'tiny muted', style: { marginBottom: 6 } }, 'Class (two lessons)'),
+          h('div', { className: 'pill-tabs', style: { flexWrap: 'wrap' } }, sessions.map((x, i) =>
+            h('button', { key: x.label, className: ses === i ? 'on' : '', onClick: () => pick(unit, i) }, x.label + (taken.has(x.label) ? ' ✓' : ''))))),
+        h('div', { className: 'tiny muted' }, cur.lessons.map((l, i) => cur.codes[i] + ' ' + l.skill).join(' · ')),
+        h('div', { className: 'list' }, tasks.map((t, i) => h('div', { key: i, className: 'item', style: { flexWrap: 'wrap', gap: 8, alignItems: 'stretch' } },
+          h('input', { id: 'hw-task-' + i, className: 'field', style: { flex: '1 1 100%', marginTop: 0 }, value: t.label, 'aria-label': 'Task ' + (i + 1),
+            onChange: (e) => setTasks(tasks.map((x, j) => (j === i ? { ...x, label: e.target.value } : x))) }),
+          h('select', { id: 'hw-type-' + i, value: t.type, 'aria-label': 'Task type', onChange: (e) => setTasks(tasks.map((x, j) => (j === i ? { ...x, type: e.target.value } : x))),
+            style: { flex: 1, background: 'var(--bg-2)', border: '1px solid var(--border-hi)', borderRadius: 10, padding: '9px 8px', color: 'var(--text)' } },
+            TYPE_OPTS.map((o) => h('option', { key: o, value: o }, o + ' · ' + G.DAMAGE[o]))),
+          h('button', { className: 'btn ghost sm', 'aria-label': 'Remove task', onClick: () => setTasks(tasks.filter((_, j) => j !== i)) }, '✕')))),
+        h('button', { className: 'btn ghost sm', onClick: () => setTasks([...tasks, { label: 'Extra task', type: 'grammar' }]) }, '+ Add task'),
+        h('label', { className: 'tiny muted', htmlFor: 'hw-days' }, 'Due in days (next class)',
+          h('input', { id: 'hw-days', className: 'field', type: 'number', min: 1, max: 14, value: days, onChange: (e) => setDays(Math.max(1, +e.target.value || 1)) })),
+        h('div', { className: 'tiny muted' }, 'Up to ' + maxPts + ' points per student when everything is Full · speaking needs a recording'),
+        h('button', { className: 'btn gold block', disabled: !tasks.length || tasks.some((t) => !t.label.trim()), onClick: () => {
+          addHomework({ id: course.id + '-u' + unit + '-' + cur.codes.join('') + '-' + Date.now().toString(36), course: course.id, unit, idx: ses + 1,
+            label: cur.label, title: cur.title, codes: cur.codes, dueAt: now + days * 86400000, tasks: tasks.map((t) => ({ label: t.label.trim(), type: t.type })) });
+          pick(unit, Math.min(ses + 1, sessions.length - 1));
+        } }, 'Give homework ' + cur.label)),
+      h(SectionHead, { title: 'Upcoming homework' }),
+      h('div', { className: 'list' }, upcoming.length ? upcoming.map((x) => h('div', { key: x.id, className: 'item' },
+        h('div', { className: 'grow' }, h('div', { className: 't' }, x.label + ' · ' + x.title), h('div', { className: 's' }, x.tasks.length + ' tasks · due in ' + fmtLeft(x.dueAt - now))))) : h('div', { className: 'item muted' }, 'None yet')));
+  };
+
   const TeacherClass = ({ s, d }) => {
     const rows = s.myGuild.members.map((m) => {
       const lesson = m.me ? d.lessonIdx + 1 : m.lesson;
-      return { m, lesson, behind: m.week === 0 || lesson < 2 };
+      const at = d.unitHws[Math.min(lesson, d.unitHws.length) - 1];
+      return { m, lesson, at, behind: m.week === 0 };
     }).sort((a, b) => (b.behind ? 1 : 0) - (a.behind ? 1 : 0) || a.m.week - b.m.week);
     const pop = s.sideQuests.map((q, i) => ({ q, n: [14, 9, 6, 11][i] + (s.me.sideDone.includes(q.id) ? 1 : 0) }));
     const max = Math.max(...pop.map((p) => p.n));
     return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 12 } },
       h('div', { className: 'card tiny', style: { color: 'var(--blue-hi)', borderColor: 'rgba(47,128,255,0.35)' } }, '🔒 Only you can see this. Students only ever see counts, never names.'),
-      h('div', { className: 'list' }, rows.map(({ m, lesson, behind }) => h('div', { key: m.id, className: 'item' },
+      h('div', { className: 'list' }, rows.map(({ m, at, behind }) => h('div', { key: m.id, className: 'item' },
         h(Face, { face: m.face, size: 34 }),
-        h('div', { className: 'grow' }, h('div', { className: 't' }, m.name), h('div', { className: 's' }, 'Lesson ' + lesson + ' · ' + fmt(m.week) + ' damage this week')),
+        h('div', { className: 'grow' }, h('div', { className: 't' }, m.name), h('div', { className: 's' }, 'At ' + (at ? at.label : '—') + ' · ' + fmt(m.week) + ' points this week')),
         behind ? h(Badge, { k: 'b-red' }, 'Needs help') : h(Badge, { k: 'b-green' }, 'Active')))),
       h(SectionHead, { title: 'Popular extra quests' }),
       h('div', { className: 'card', style: { display: 'flex', flexDirection: 'column', gap: 10 } }, pop.map(({ q, n }) => h('div', { key: q.id },
@@ -815,7 +880,7 @@
     // Push-style notifications: counts only, never names.
     const notifs = [];
     if (d.notAttacked > 0) notifs.push({ icon: 'bell', text: 'Your fortress has ' + pct(d.usHP, G.FORTRESS_HP) + '% HP and ' + fmtLeft(d.battleLeft) + ' to go. ' + d.notAttacked + ' teammates haven\'t attacked yet.' });
-    if (d.nextHw && !s.me.submitted[d.nextHw.id]) notifs.push({ icon: '⚡', text: d.nextHw.title + ' is due in ' + fmtLeft(d.nextHw.dueAt - now) + '. Submit 24h early for an Early Strike (×1.5).' });
+    if (d.nextHw && !s.me.submitted[d.nextHw.id]) notifs.push({ icon: '⚡', text: d.nextHw.label + ' (' + d.nextHw.title + ') is due in ' + fmtLeft(d.nextHw.dueAt - now) + '. Submit 24h early for an Early Strike (×1.5).' });
     if (d.liveBoss) notifs.push({ icon: d.liveBoss.icon, text: d.liveBoss.name + ' has ' + pct(d.liveBoss.hp - d.liveBoss.dealt, d.liveBoss.hp) + '% HP left.' });
     if (s.me.chests > 0) notifs.push({ icon: 'gift', text: 'You have a chest to open on your profile.' });
 
@@ -827,12 +892,13 @@
         if (dd.usHP < 600 || dd.battleLeft <= 0) return;
         const enemy = cur.battle.enemy;
         const m = enemy.members[Math.floor(Math.random() * enemy.members.length)];
-        const type = ['grammar', 'vocab', 'writing', 'speaking'][Math.floor(Math.random() * 4)];
+        const pick = [['6C + 6D', 40], ['6E + 6F', 40], ['6G + 6H', 75]][Math.floor(Math.random() * 3)];
         const crit = Math.random() < 0.15;
-        const dmg = G.fortressDamage(G.DAMAGE[type] * (crit ? 2 : 1), enemy.members.length, dd.myShield);
+        const raw = Math.round(pick[1] * (0.5 + Math.random() * 0.5) * (crit ? 1.6 : 1));
+        const dmg = G.fortressDamage(raw, dd.enemyMax, dd.myShield);
         const id = uid();
         up((n) => {
-          n.feed.push({ id, at: Date.now(), side: 'enemy', who: m.name, what: 'completed a ' + TYPE_NAME[type] + ' task', dmg, crit });
+          n.feed.push({ id, at: Date.now(), side: 'enemy', who: m.name, what: 'completed ' + pick[0], dmg, crit });
           if (!n.battle.enemy.attackers.includes(m.id)) n.battle.enemy.attackers.push(m.id);
         });
         setFresh(id);
@@ -853,7 +919,7 @@
       up((n) => {
         n.me.submitted[hw.id] = 'pending';
         n.submissions.push({ id: sid, who: n.me.id, whoName: n.me.name, hwId: hw.id, statuses, audio, submittedAt: Date.now(), streak: n.me.streak, state: 'pending', feedId: id });
-        n.feed.push({ id, at: Date.now(), side: 'us', who: n.me.name, what: est.allFull ? 'completed a full homework' : 'submitted homework', dmg: fortress, pending: true, early: est.timing === 'early' });
+        n.feed.push({ id, at: Date.now(), side: 'us', who: n.me.name, what: 'completed ' + hw.label + (est.allFull ? ' · full homework' : ''), dmg: fortress, pending: true, early: est.timing === 'early' });
       });
       setFresh(id);
       pop(fortress, '⏳ Pending · lands when your teacher checks it');
@@ -868,14 +934,14 @@
     };
     const completeQuest = (q) => {
       const rewarded = sRef.current.me.sideToday < G.SIDE_QUEST_DAILY_CAP;
-      const dmg = rewarded ? G.fortressDamage(G.SIDE_QUEST_DAMAGE, sRef.current.myGuild.members.length, d.enemyShield) : 0;
+      const dmg = rewarded ? G.fortressDamage(G.SIDE_QUEST_DAMAGE, d.myMax, d.enemyShield) : 0;
       const id = uid();
       up((n) => {
         n.me.sideDone.push(q.id);
         if (rewarded) {
           n.me.sideToday += 1; n.me.coins += q.coins; n.me.xp += q.xp;
           n.feed.push({ id, at: Date.now(), side: 'us', who: n.me.name, what: 'finished an extra quest', dmg, quest: true });
-          const meM = n.myGuild.members.find((m) => m.me); meM.week += dmg; n.me.totalDamage += dmg;
+          const meM = n.myGuild.members.find((m) => m.me); meM.week += G.SIDE_QUEST_DAMAGE; n.me.totalDamage += G.SIDE_QUEST_DAMAGE;
         }
       });
       if (rewarded) { setFresh(id); flash('+' + q.coins + ' coins · +' + q.xp + ' XP · ' + dmg + ' bonus damage', '🪙'); } else flash('Quest done — daily reward cap reached', '✔');
@@ -904,18 +970,19 @@
       const cur = sRef.current;
       const hw = cur.homeworks.find((x) => x.id === sub.hwId);
       const dmg = G.calcDamage({ hw, statuses: sub.statuses, audio: sub.audio, submittedAt: sub.submittedAt, streak: sub.streak, stars });
-      const fort = G.fortressDamage(dmg.total, cur.myGuild.members.length, derive(cur, Date.now()).enemyShield);
+      const dd0 = derive(cur, Date.now());
+      const fort = G.fortressDamage(dmg.total, dd0.myMax, dd0.enemyShield, hw);
       const isMe = sub.who === cur.me.id;
       const feedId = sub.feedId || uid();
       let defeated = null;
       up((n) => {
         const x = n.submissions.find((y) => y.id === sub.id);
         x.state = 'verified'; x.stars = stars; x.dmg = fort;
-        const entry = { id: feedId, at: Date.now(), side: 'us', who: sub.whoName, what: dmg.allFull ? 'completed a full homework' : 'completed homework', dmg: fort, crit: dmg.crit, early: dmg.timing === 'early' };
+        const entry = { id: feedId, at: Date.now(), side: 'us', who: sub.whoName, what: 'completed ' + hw.label + (dmg.allFull ? ' · full homework' : ''), dmg: fort, crit: dmg.crit, early: dmg.timing === 'early' };
         const f = n.feed.find((y) => y.id === feedId);
         if (f) Object.assign(f, entry, { pending: false }); else n.feed.push(entry);
         const member = n.myGuild.members.find((m) => m.id === sub.who);
-        if (member) { member.week += fort; if (!member.me && member.lesson === hw.lesson) member.lesson += 1; }
+        if (member) { member.week += dmg.total; if (!member.me && member.lesson === hw.idx) member.lesson += 1; }
         const boss = n.bosses.find((b) => b.unit === hw.unit && !b.defeated);
         if (boss) {
           boss.dealt = Math.min(boss.hp, boss.dealt + dmg.total);
@@ -925,7 +992,7 @@
         }
         if (isMe) {
           n.me.submitted[hw.id] = 'verified';
-          n.me.totalDamage += fort;
+          n.me.totalDamage += dmg.total;
           n.me.xp += Math.round(dmg.total / 2);
           n.me.coins += 10 + (dmg.crit ? 15 : 0);
           n.me.seasonPts += dmg.total;
@@ -956,24 +1023,27 @@
       flash('Sent back to ' + sub.whoName + ' to improve — no damage this time', '↩️');
     };
     const reset = () => {
-      setS(G.seed()); setTab('home'); setTeacher(false); setSheet(null); setBattleOpen(false);
+      setS(G.seed(Date.now(), { size: s.groupSize })); setTab('home'); setTeacher(false); setSheet(null); setBattleOpen(false);
       flash('Demo reset', '↺');
     };
 
     const go = (k) => { setBattleOpen(false); setTab(k); };
     const openTask = (hwId, idx) => setSheet({ kind: 'task', hwId, idx });
     const studentTabs = [['home', 'home', 'Home'], ['map', 'map', 'Map'], ['homework', 'list', 'Homework'], ['guild', 'guild', 'Guild'], ['profile', 'user', 'Profile']];
-    const teacherTabs = [['verify', 'check', 'Approve'], ['battles', 'swords', 'Battles'], ['bosses', 'guild', 'Bosses'], ['class', 'user', 'Class']];
+    const teacherTabs = [['verify', 'check', 'Approve'], ['homework', 'list', 'Homework'], ['battles', 'swords', 'Battles'], ['bosses', 'guild', 'Bosses'], ['class', 'user', 'Class']];
 
     let main;
     if (teacher) {
       main = h('div', null,
         h('header', { className: 'topbar' },
           h(Crest, { tone: 'blue', crest: 'lion', size: 30, spikes: false }),
-          h('div', { className: 'grow' }, h('div', { style: { fontWeight: 800 } }, { verify: 'Approve homework', battles: 'Battles', bosses: 'Bosses', class: 'Class' }[ttab]), h('div', { className: 'tiny muted' }, 'Teacher · ' + s.myGuild.teacher + ' · ' + s.myGuild.name)),
+          h('div', { className: 'grow' }, h('div', { style: { fontWeight: 800 } }, { verify: 'Approve homework', homework: 'Give homework', battles: 'Battles', bosses: 'Bosses', class: 'Class' }[ttab]), h('div', { className: 'tiny muted' }, 'Teacher · ' + s.myGuild.teacher + ' · ' + s.myGuild.name)),
           h('button', { className: 'btn outline-gold', onClick: () => setTeacher(false) }, 'Exit')),
         h('div', { className: 'page' },
           ttab === 'verify' && h(TeacherVerify, { s, d, now, verify, returnSub }),
+          ttab === 'homework' && h(TeacherHomework, { s, now, addHomework: (hw) => {
+            up((n) => { n.homeworks.push(hw); n.homeworks.sort((a, b) => a.unit - b.unit || a.idx - b.idx || a.dueAt - b.dueAt); });
+            flash('Homework ' + hw.label + ' sent to ' + s.myGuild.members.length + ' students', '📚'); } }),
           ttab === 'battles' && h(TeacherBattles, { s, d, setMatch: (m) => up((n) => { n.battle.matchMode = m; }), flash }),
           ttab === 'bosses' && h(TeacherBosses, { s, now, addBoss: (b) => { up((n) => { n.bosses.push(b); }); flash('Boss created: ' + b.name, '👹'); } }),
           ttab === 'class' && h(TeacherClass, { s, d })));
@@ -994,7 +1064,7 @@
     const S = sheet || {};
     return h('div', { className: cx('shell', minimal && 'minimal') },
       main,
-      h('nav', { className: 'tabbar', style: teacher ? { gridTemplateColumns: 'repeat(4, 1fr)' } : null },
+      h('nav', { className: 'tabbar' },
         tabs.map(([k, icon, label]) => {
           const on = teacher ? ttab === k : tab === k;
           const dot = (teacher && k === 'verify' && d.pendingQueue.length > 0) || (!teacher && k === 'profile' && s.me.chests > 0);
@@ -1009,7 +1079,8 @@
       S.kind === 'quest' && h(QuestSheet, { key: S.id, s, qId: S.id, onClose: () => setSheet({ kind: 'quests' }), complete: completeQuest }),
       S.kind === 'shop' && h(ShopSheet, { s, onClose: close, buy, equip }),
       S.kind === 'welcome' && h(WelcomeSheet, { onClose: () => { savePref('uq-welcomed', true); close(); } }),
-      S.kind === 'settings' && h(SettingsSheet, { onClose: close, teacher, setTeacher: (v) => { setTeacher(v); close(); }, minimal, setMinimal, reset }),
+      S.kind === 'settings' && h(SettingsSheet, { onClose: close, teacher, setTeacher: (v) => { setTeacher(v); close(); }, minimal, setMinimal, reset,
+        size: s.groupSize, setSize: (n) => { setS(G.seed(Date.now(), { size: n })); close(); setTab('home'); setBattleOpen(false); flash('Demo restarted with ' + n + ' students in your group', '👥'); } }),
       S.kind === 'ach' && h(Sheet, { onClose: close }, h('div', { className: 'h1', style: { marginBottom: 12 } }, 'Achievements'), h('div', { className: 'ach-grid' }, ACH.map((a) => h(Medal, { key: a.k, a, me: s.me })))),
       S.kind === 'chest' && h(InfoSheet, { onClose: close, icon: h(Emo, { v: S.reward.icon, size: 96 }), title: S.reward.label, body: 'From your Full homework chest.' }),
       S.kind === 'locked' && h(InfoSheet, { onClose: close, icon: h(Crest, { tone: 'grey', icon: 'lock', size: 70, spikes: false }),

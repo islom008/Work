@@ -19,8 +19,7 @@
   const ESTIMATE_STARS = 2;        // what pending damage assumes before the teacher rates it
   const STREAK_MIN = 3;
   const STREAK_BONUS = 0.10;
-  const REF_GUILD_SIZE = 10;       // damage is normalised to a 10-student guild
-  const FORTRESS_HP = 5000;
+  const FORTRESS_HP = 1000;
   const BOSS_HP_PER_MEMBER = 200;
   const SIDE_QUEST_DAILY_CAP = 3;
   const SIDE_QUEST_DAMAGE = 5;
@@ -53,14 +52,23 @@
     return { lines, base, fullBonus, allFull, timing, timingMult, stars, starMult, streakMult, total, crit: stars === 3 };
   };
 
-  // Fairness: a 15-student guild must not beat an 8-student guild by headcount.
-  const sizeFactor = (members) => REF_GUILD_SIZE / Math.max(1, members);
+  // Fairness: groups range from 2 to 20 students, study different levels and get different
+  // amounts of homework. So a battle is scored as a share of each group's own potential:
+  // if every student did every homework of the week fully (★★, on time), the group would
+  // deal exactly FORTRESS_HP. Bonuses (early, 3★, streaks) can push a group above that.
+  const maxRaw = (hw) => hw.tasks.reduce((a, t) => a + (DAMAGE[t.type] || 0), 0) + FULL_BONUS;
+  const weeklyMax = (members, perStudent) => Math.max(1, members * perStudent);
   // Shield = share of the guild that has attacked this week (plus charms).
   const shieldPct = (attackers, members, bonus = 0) => Math.min(1, attackers / Math.max(1, members) + bonus);
   // Full shield takes 25% less damage; an empty one takes 25% more.
   const incomingMult = (shield) => 1.25 - 0.5 * shield;
-  const fortressDamage = (raw, attackerMembers, defenderShield) =>
-    Math.round(raw * sizeFactor(attackerMembers) * incomingMult(defenderShield));
+  // In battles, bonuses can lift one homework to at most +60% of its normal maximum, so a
+  // single student in a group of 2 can't flatten the other fortress alone.
+  const BATTLE_CAP = 1.6;
+  const fortressDamage = (raw, attackerWeeklyMax, defenderShield, hw) => {
+    const capped = hw ? Math.min(raw, maxRaw(hw) * BATTLE_CAP) : raw;
+    return Math.round((capped / Math.max(1, attackerWeeklyMax)) * FORTRESS_HP * incomingMult(defenderShield));
+  };
 
   // Levels: level n starts at 50·n·(n-1) XP (0, 100, 300, 600, 1000 …).
   const xpForLevel = (n) => 50 * n * (n - 1);
@@ -85,106 +93,122 @@
   };
 
   // ---------------------------------------------------------------- demo seed
-  // Result English School · Upper Intermediate · Novza Lions vs Chilonzor Dragons.
-  const seed = (now = Date.now()) => {
-    const H = (h) => now + h * HOUR;
-    // 3D portraits from Microsoft's Fluent Emoji (assets/3d, MIT licence).
-    const FACES = ['face_man_beard_medium-light', 'face_woman_with_headscarf_light', 'face_person_beard_medium', 'face_boy_medium-light', 'face_woman_curly_hair_light', 'face_man_medium', 'face_woman_medium-light', 'face_man_curly_hair_light', 'face_girl_medium-light', 'face_man_red_hair_light', 'face_woman_light', 'face_man_light', 'face_woman_red_hair_light', 'face_person_curly_hair_medium', 'face_girl_light', 'face_man_medium-light'];
-    const P = (name, i, extra = {}) => ({ id: name.toLowerCase().replace(/[^a-z]/g, ''), name, face: FACES[i % FACES.length], ...extra });
+  // Result English School. Islom's group (Novza Lions) studies Solutions 3rd ed. Upper-Intermediate;
+  // this week they battle the Chilonzor Dragons, a bigger Intermediate group, which the
+  // share-of-potential scoring makes a fair fight. `size` sets the demo group size (2–20).
+  const NAMES = ['Sardor', 'Malika', 'Islom', 'Kamron', 'Aziz', 'Robiya', 'Dilnoza', 'Javohir', 'Madina', 'Bekzod',
+    'Sevara', 'Otabek', 'Nodira', 'Jamshid', 'Gulnoza', 'Firdavs', 'Shahlo', 'Asadbek', 'Mohira', 'Doniyor'];
+  const ENEMY_NAMES = ['Timur', 'Kamila', 'Rustam', 'Nilufar', 'Shahzod', 'Zarina', 'Jasur', 'Laylo', 'Bobur', 'Feruza',
+    'Gulnora', 'Ulugbek', 'Diyora', 'Sanjar', 'Muslima', 'Akmal', 'Yulduz'];
+  // 3D portraits from Microsoft's Fluent Emoji (assets/3d, MIT licence).
+  const FACES = ['face_man_beard_medium-light', 'face_woman_with_headscarf_light', 'face_man_curly_hair_light', 'face_boy_medium-light', 'face_man_medium', 'face_woman_curly_hair_light', 'face_woman_medium-light', 'face_man_red_hair_light', 'face_girl_medium-light', 'face_person_beard_medium', 'face_woman_light', 'face_man_light', 'face_woman_red_hair_light', 'face_person_curly_hair_medium', 'face_girl_light', 'face_man_medium-light', 'face_woman_with_headscarf_medium-light', 'face_boy_light', 'face_woman_curly_hair_medium', 'face_man_beard_light'];
+  const C = root.Courses || (typeof require !== 'undefined' ? require('./courses.js') : null);
 
-    // week = damage landed in this battle so far (before this session).
-    const myGuild = {
-      id: 'novza', name: 'Novza Lions', crest: 'lion', side: 'blue', teacher: 'Ms. Nargiza', level: 'Upper Intermediate',
-      members: [
-        P('Sardor', 0, { week: 680, lesson: 3 }), P('Malika', 1, { week: 540, lesson: 3 }),
-        P('Islom', 7, { me: true, week: 420 }), P('Kamron', 3, { week: 390, lesson: 2 }),
-        P('Aziz', 5, { week: 350, lesson: 3 }), P('Robiya', 4, { week: 310, lesson: 3 }),
-        P('Dilnoza', 6, { week: 260, lesson: 2 }), P('Javohir', 9, { week: 220, lesson: 2 }),
-        P('Madina', 8, { week: 180, lesson: 2 }), P('Bekzod', 2, { week: 120, lesson: 1 }),
-        P('Sevara', 10, { week: 0, lesson: 1 }), P('Otabek', 11, { week: 0, lesson: 1 }),
-      ],
-    };
+  // Turn a coursebook unit into homeworks, one per class (two lessons each).
+  const unitHomeworks = (course, unit, dues) => C.sessionsOf(course, unit).map((ses, i) => ({
+    id: course.id + '-u' + unit + '-s' + (i + 1), course: course.id, unit, idx: i + 1,
+    label: ses.label, title: ses.title, codes: ses.codes,
+    dueAt: dues[i], tasks: C.defaultTasks(course, unit, ses.lessons),
+  }));
+
+  const seed = (now = Date.now(), opts = {}) => {
+    const size = Math.max(2, Math.min(20, opts.size || 12));
+    const H = (h) => now + h * HOUR;
+    const P = (name, i, extra = {}) => ({ id: name.toLowerCase().replace(/[^a-z]/g, ''), name, face: FACES[i % FACES.length], ...extra });
+    const upper = C.COURSES['solutions-upper'], inter = C.COURSES['solutions-int'];
+
+    // Unit 5 "Relationships": 5A+5B, 5C+5D, 5E+5F done or due this week; 5G+5H is today's homework.
+    const u5 = unitHomeworks(upper, 5, [H(-24 * 7), H(-60), H(-12), H(50)]);
+    const u6 = unitHomeworks(upper, 6, [H(24 * 5), H(24 * 7), H(24 * 9), H(24 * 11)]);
+    // Only the first class of Unit 6 is planned so far; the teacher gives the rest from the builder.
+    const homeworks = [...u5, u6[0]];
+    // A battle covers the three classes of the week.
+    const weekHws = u5.slice(1, 4);
+    const perStudentUs = weekHws.reduce((a, hw) => a + maxRaw(hw), 0);
+    const perStudentEnemy = unitHomeworks(inter, 6, [0, 0, 0, 0]).slice(1, 4).reduce((a, hw) => a + maxRaw(hw), 0);
+
+    // Members: Islom is always in; the rest fill up to the chosen size.
+    const names = ['Islom', ...NAMES.filter((n) => n !== 'Islom')].slice(0, size)
+      .sort((a, b) => NAMES.indexOf(a) - NAMES.indexOf(b));
+    const WEEK = [118, 96, 74, 70, 62, 55, 46, 40, 32, 22, 0, 0, 51, 38, 27, 66, 44, 12, 0, 30];
+    const members = names.map((n) => {
+      const i = NAMES.indexOf(n);
+      const me = n === 'Islom';
+      return P(n, i, { me, week: WEEK[i], lesson: me ? undefined : (WEEK[i] === 0 ? 3 : WEEK[i] > 60 ? 4 : 3) });
+    });
+    // In tiny groups make sure at least one teammate has already attacked.
+    if (members.filter((m) => !m.me && m.week > 0).length === 0) members.find((m) => !m.me).week = 58;
+    const myGuild = { id: 'novza', name: 'Novza Lions', crest: 'lion', side: 'blue', teacher: 'Ms. Nargiza', course: upper.id, level: upper.level, members };
+
     const enemy = {
-      id: 'chilonzor', name: 'Chilonzor Dragons', crest: 'dragon', side: 'red', teacher: 'Mr. Timur', level: 'Upper Intermediate',
-      members: ['Timur', 'Kamila', 'Rustam', 'Nilufar', 'Shahzod', 'Zarina', 'Jasur', 'Laylo', 'Bobur', 'Feruza', 'Gulnora', 'Ulugbek'].map((n, i) => P(n, i + 4)),
-      attackers: ['timur', 'kamila', 'rustam', 'nilufar', 'shahzod', 'zarina', 'jasur', 'laylo'],
+      id: 'chilonzor', name: 'Chilonzor Dragons', crest: 'dragon', side: 'red', teacher: 'Mr. Timur', course: inter.id, level: inter.level,
+      members: ENEMY_NAMES.map((n, i) => P(n, i + 5)),
+      attackers: ENEMY_NAMES.slice(0, 11).map((n) => n.toLowerCase()),
+      perStudent: perStudentEnemy,
     };
     const otherGroups = [
-      { id: 'yunusobod', name: 'Yunusobod Wolves', crest: 'wolf', level: 'Upper Intermediate', members: 10, teacher: 'Ms. Dilnoza' },
-      { id: 'sergeli', name: 'Sergeli Eagles', crest: 'eagle', level: 'Upper Intermediate', members: 14, teacher: 'Mr. Timur' },
-      { id: 'mirobod', name: 'Mirobod Bears', crest: 'bear', level: 'Intermediate', members: 11, teacher: 'Ms. Nargiza' },
+      { id: 'yunusobod', name: 'Yunusobod Wolves', crest: 'wolf', level: 'Upper-Intermediate', members: 6, teacher: 'Ms. Dilnoza' },
+      { id: 'sergeli', name: 'Sergeli Eagles', crest: 'eagle', level: 'Pre-Intermediate', members: 19, teacher: 'Mr. Timur' },
+      { id: 'mirobod', name: 'Mirobod Bears', crest: 'bear', level: 'Beginner', members: 3, teacher: 'Ms. Nargiza' },
     ];
 
-    const units = [
-      { unit: 1, name: 'First Impressions' }, { unit: 2, name: 'City Life' }, { unit: 3, name: 'Stories We Tell' },
-      { unit: 4, name: 'Mind & Body' }, { unit: 5, name: 'The Working World' }, { unit: 6, name: 'Money Matters' },
-      { unit: 7, name: 'Science & Nature' }, { unit: 8, name: 'Global Issues' },
-    ];
-    const T = (label, type) => ({ label, type });
-    const homeworks = [
-      { id: 'u5l1', unit: 5, lesson: 1, title: 'Jobs and Careers', dueAt: H(-24 * 6),
-        tasks: [T('Vocabulary: job words', 'vocab'), T('Grammar: Present Perfect review', 'grammar'), T('Writing: My dream job', 'writing')] },
-      { id: 'u5l2', unit: 5, lesson: 2, title: 'If I Were the Boss', dueAt: H(-24 * 2),
-        tasks: [T('Grammar: Second conditional', 'grammar'), T('Listening: Office talk', 'listening'), T('Speaking: My ideal workplace', 'speaking')] },
-      { id: 'u5l3', unit: 5, lesson: 3, title: 'A Good Job for Me?', dueAt: H(72),
-        tasks: [T('Vocabulary practice', 'vocab'), T('Grammar: Conditionals', 'grammar'), T('Writing: An opinion essay', 'writing'), T('Speaking: Life choices', 'speaking')] },
-      { id: 'u5l4', unit: 5, lesson: 4, title: 'The Job Interview', dueAt: H(24 * 5),
-        tasks: [T('Reading: Interview tips', 'reading'), T('Speaking: Answer 3 questions', 'speaking')] },
-      { id: 'u5l5', unit: 5, lesson: 5, title: 'Career Plans', dueAt: H(24 * 7),
-        tasks: [T('Grammar: Future forms', 'grammar'), T('Writing: A cover letter', 'writing')] },
-      { id: 'u6l1', unit: 6, lesson: 1, title: 'Money Talks', dueAt: H(24 * 10),
-        tasks: [T('Vocabulary: money idioms', 'vocab'), T('Grammar: Wishes', 'grammar')] },
-    ];
-
+    const units = upper.units.map((t, i) => ({ unit: i + 1, name: C.unitTitle(upper, i + 1) }));
+    const myMax = members.length * perStudentUs, enemyMax = enemy.members.length * perStudentEnemy;
+    const bossHp = BOSS_HP_PER_MEMBER * members.length;
+    const contrib = {};
+    members.forEach((m) => { if (!m.me && m.week > 0) contrib[m.id] = Math.round(m.week * 2.2); });
+    contrib.islom = 150;
+    const dealt = Math.min(Math.round(bossHp * 0.58), Object.values(contrib).reduce((a, v) => a + v, 0));
     const bosses = [
-      { unit: 4, name: 'The Mind Mirage', icon: 'eye', hp: 2400, dealt: 2400, deadline: H(-24 * 8), defeated: true },
-      { unit: 5, name: 'The Conditional Colossus', icon: 'moai', hp: BOSS_HP_PER_MEMBER * myGuild.members.length, dealt: 1380, deadline: H(24 * 8),
-        contrib: { sardor: 310, malika: 260, islom: 190, aziz: 170, robiya: 150, kamron: 130, dilnoza: 90, javohir: 80 } },
-      { unit: 6, name: 'The Money Minotaur', icon: 'ox', hp: 2400, dealt: 0, deadline: H(24 * 16) },
+      { unit: 4, name: 'The Wanderlust Wraith', icon: 'eye', hp: bossHp, dealt: bossHp, deadline: H(-24 * 8), defeated: true },
+      { unit: 5, name: 'The Relationship Riddler', icon: 'moai', hp: bossHp, dealt, deadline: H(24 * 4), contrib },
+      { unit: 6, name: 'The Health Hydra', icon: 'ox', hp: bossHp, dealt: 0, deadline: H(24 * 12) },
     ];
 
-    // Feed items carry the fortress damage that actually landed.
-    const F = (id, h, side, who, what, dmg, extra = {}) => ({ id, at: H(h), side, who, what, dmg, ...extra });
+    // Seeded activity: whole-homework attacks, sized for this group.
+    const atk = (raw, mine) => fortressDamage(raw, mine ? myMax : enemyMax, 0.8);
+    const mates = members.filter((m) => !m.me && m.week > 0);
+    const F = (id, h, side, who, what, raw, extra = {}) => ({ id, at: H(h), side, who, what, dmg: atk(raw, side === 'us'), ...extra });
     const feed = [
-      F('f1', -2, 'us', 'Malika', 'completed a writing task', 25),
-      F('f2', -3, 'enemy', 'Kamila', 'completed a speaking task', 30),
-      F('f3', -4, 'us', 'Sardor', 'completed a speaking task', 30),
-      F('f4', -6, 'us', 'Aziz', 'completed a grammar task', 10),
-      F('f5', -7, 'enemy', 'Rustam', 'completed a full homework', 64, { crit: true }),
-      F('f6', -8, 'us', 'Robiya', 'completed a full homework bonus', 20),
-      F('f7', -11, 'enemy', 'Zarina', 'completed a writing task', 25),
-      F('f8', -14, 'us', 'Kamron', 'completed a vocabulary task', 10),
-      F('f9', -20, 'us', 'Sardor', 'completed a full homework', 96, { crit: true, early: true }),
-    ];
-    // Damage from earlier in the week, so the bars open at 4,320 vs 3,190.
+      mates[1] && F('f1', -2, 'us', mates[1].name, 'completed 5E + 5F', 40),
+      F('f2', -3, 'enemy', 'Kamila', 'completed 6E + 6F', 60, { early: true }),
+      mates[0] && F('f3', -5, 'us', mates[0].name, 'completed 5E + 5F', 64, { crit: true, early: true }),
+      F('f4', -7, 'enemy', 'Rustam', 'completed 6C + 6D', 64, { crit: true }),
+      mates[2] && F('f5', -10, 'us', mates[2].name, 'completed 5E + 5F', 30),
+      F('f6', -14, 'enemy', 'Zarina', 'completed 6C + 6D', 40),
+      mates[3] && F('f7', -20, 'us', mates[3].name, 'completed 5C + 5D', 40),
+    ].filter(Boolean);
+    // Earlier in the week: the bars open at about 86% vs 64%.
     const sum = (side) => feed.filter((f) => f.side === side).reduce((a, f) => a + f.dmg, 0);
-    const base = { us: 1810 - sum('us'), enemy: 680 - sum('enemy') };
+    const base = { us: Math.max(0, 362 - sum('us')), enemy: Math.max(0, 136 - sum('enemy')) };
 
-    const submissions = [
-      { id: 's1', who: 'otabek', whoName: 'Otabek', hwId: 'u5l2', statuses: ['Full', '50%', 'Not full'], audio: {}, submittedAt: H(-5), streak: 0, state: 'pending' },
-      { id: 's2', who: 'javohir', whoName: 'Javohir', hwId: 'u5l3', statuses: ['Full', 'Full', 'Full', 'Full'], audio: { 3: '1:04' }, submittedAt: H(-1), streak: 4, state: 'pending' },
-    ];
+    const pendingMates = members.filter((m) => !m.me).slice(-2);
+    const submissions = pendingMates.map((m, i) => ({
+      id: 's' + (i + 1), who: m.id, whoName: m.name, hwId: u5[3].id,
+      statuses: i === 0 ? ['Full', '50%'] : ['Full', 'Full'], audio: i === 0 ? {} : { 0: '1:04' },
+      submittedAt: H(-5 + i * 4), streak: i * 4, state: 'pending',
+    }));
 
     const sideQuests = [
-      { id: 'q1', kind: 'video', icon: 'clapper', color: '#E5383B', level: 'Upper Intermediate', title: 'Job interview: do\'s and don\'ts', mins: 4, coins: 5, xp: 15, assigned: true,
-        body: 'A recruiter explains what makes a strong answer in a job interview — and the three mistakes she hears most often.',
+      { id: 'q1', kind: 'video', icon: 'clapper', color: '#E5383B', level: 'Upper-Intermediate', title: 'How friendships change as we grow up', mins: 4, coins: 5, xp: 15, assigned: true,
+        body: 'Three people talk about a friend they lost touch with and one they still see every week.',
         check: [
-          { q: 'What should a strong answer include?', opts: ['A real example', 'Only adjectives', 'A joke'], a: 0 },
-          { q: '"I\'d be a good fit because…" uses which form?', opts: ['Past simple', 'Would + verb', 'Present perfect'], a: 1 },
-          { q: 'One common mistake is…', opts: ['Asking questions', 'Speaking badly of an old boss', 'Arriving early'], a: 1 },
+          { q: '"To lose touch with someone" means…', opts: ['to stop being in contact', 'to argue', 'to meet again'], a: 0 },
+          { q: '"We get on really well" means…', opts: ['we often travel', 'we have a good relationship', 'we work together'], a: 1 },
+          { q: '"I look up to my older sister" means…', opts: ['I admire her', 'I visit her', 'I am taller than her'], a: 0 },
         ] },
-      { id: 'q2', kind: 'article', icon: 'newspaper', color: '#2F80FF', level: 'Upper Intermediate', title: 'The four-day work week', mins: 3, coins: 5, xp: 10, timed: 60,
-        body: 'When a software company in Tashkent cut its week to four days, managers expected output to fall. Instead, it rose by eight percent. Staff took fewer sick days, and the company found it easier to hire. Critics say the model only works where tasks can be measured clearly, and that customer-facing teams still need cover on the fifth day.',
+      { id: 'q2', kind: 'article', icon: 'newspaper', color: '#2F80FF', level: 'Upper-Intermediate', title: 'Why we text instead of calling', mins: 3, coins: 5, xp: 10, timed: 60,
+        body: 'A survey of 2,000 young adults found that most of them would rather send a message than make a phone call. Texting gives people time to think about what they want to say, and it doesn\'t interrupt the other person. However, many also said that a voice call feels warmer, and that they save calls for the people they are closest to.',
         check: [
-          { q: 'What happened to output?', opts: ['It fell', 'It rose by 8%', 'It stayed the same'], a: 1 },
-          { q: 'Hiring became…', opts: ['easier', 'harder', 'impossible'], a: 0 },
-          { q: 'Critics say the model needs…', opts: ['more managers', 'clearly measurable tasks', 'longer days'], a: 1 },
+          { q: 'Why do people prefer texting?', opts: ['It is cheaper', 'They have time to think', 'It is faster to type'], a: 1 },
+          { q: 'Calls are kept for…', opts: ['work', 'the closest people', 'emergencies only'], a: 1 },
+          { q: '"Warmer" here means…', opts: ['more friendly', 'hotter', 'longer'], a: 0 },
         ] },
-      { id: 'q3', kind: 'shadowing', icon: 'mic', color: '#22C55E', level: 'Upper Intermediate', title: 'Shadow: introducing yourself at work', mins: 5, coins: 5, xp: 20,
+      { id: 'q3', kind: 'shadowing', icon: 'mic', color: '#22C55E', level: 'Upper-Intermediate', title: 'Shadow: talking about a close friend', mins: 5, coins: 5, xp: 20,
         body: 'Listen to each line, then say it at the same speed and rhythm. Record yourself reading all five lines.',
-        lines: ['Hi, I\'m Islom — I\'ve just joined the marketing team.', 'I\'ve been working in sales for about two years.', 'If you need anything, just let me know.', 'I\'d love to hear how your team works.', 'Shall we grab a coffee later?'] },
-      { id: 'q4', kind: 'flashcards', icon: 'cards', color: '#8B5CF6', level: 'Upper Intermediate', title: 'Unit 5 words', mins: 3, coins: 5, xp: 10, assigned: true,
-        cards: [['promotion', 'a move to a higher job'], ['deadline', 'the latest time to finish'], ['colleague', 'a person you work with'], ['salary', 'money paid for work, usually monthly'], ['resign', 'to leave your job by choice'], ['workload', 'the amount of work you have']] },
+        lines: ['I\'ve known Aziz since we were seven.', 'We\'ve been through a lot together.', 'He always tells me the truth, even when I don\'t want to hear it.', 'We don\'t see each other as often as we used to.', 'But when we meet, it\'s as if nothing has changed.'] },
+      { id: 'q4', kind: 'flashcards', icon: 'cards', color: '#8B5CF6', level: 'Upper-Intermediate', title: 'Unit 5 words', mins: 3, coins: 5, xp: 10, assigned: true,
+        cards: [['get on with', 'have a good relationship with'], ['fall out', 'stop being friends after an argument'], ['make up', 'become friends again'], ['look up to', 'admire and respect'], ['rely on', 'trust and depend on'], ['bring up', 'raise a child']] },
     ];
 
     const shop = [
@@ -202,30 +226,33 @@
       { id: 'charm', kind: 'consumable', icon: 'shield', name: 'Guild Shield Charm', price: 100, desc: '+5% guild shield until the end of this battle. One per week.' },
     ];
 
+    const done = (hw) => hw.tasks.map(() => 'Full');
     return {
-      version: 3,
+      version: 4,
       seededAt: now,
+      groupSize: size,
       school: 'Result English School',
-      course: { name: 'Upper Intermediate', units: 12 },
-      battle: { startedAt: H(-96), endsAt: H(72), enemy, otherGroups, matchMode: 'auto', base,
-        history: [{ vs: 'Yunusobod Wolves', won: true, us: 3870, them: 2140 }, { vs: 'Sergeli Eagles', won: false, us: 2950, them: 3310 }, { vs: 'Mirobod Bears', won: true, us: 4120, them: 3600 }] },
+      course: { id: upper.id, name: upper.book + ' ' + upper.level, level: upper.level, units: upper.units.length },
+      battle: { startedAt: H(-96), endsAt: H(72), enemy, otherGroups, matchMode: 'auto', base, perStudent: perStudentUs,
+        history: [{ vs: 'Yunusobod Wolves', won: true, us: 71, them: 58 }, { vs: 'Sergeli Eagles', won: false, us: 64, them: 69 }, { vs: 'Mirobod Bears', won: true, us: 82, them: 77 }] },
       myGuild, units, homeworks, bosses, feed, submissions, sideQuests, shop,
       me: {
         id: 'islom', name: 'Islom', short: 'S-4821',
         xp: 6820, coins: 350, seasonPts: 1450, streak: 5, week: [1, 1, 1, 1, 0, 0, 0], freezes: 0, totalDamage: 2480,
         avatar: 'av-me', frame: 'fr-blue', owned: ['av-me', 'fr-blue'], charmUsed: false,
         title: 'Grammar Strategist', titles: ['Grammar Strategist', 'Early Bird'],
-        tasks: { u5l1: ['Full', 'Full', 'Full'], u5l2: ['Full', 'Full', 'Full'], u5l3: ['Full', 'Full', 'Not started', 'Not started'] },
-        submitted: { u5l1: 'verified', u5l2: 'verified' },
-        audio: { u5l2: { 2: '0:52' } }, sideToday: 0, sideDone: [], chests: 0,
+        tasks: { [u5[0].id]: done(u5[0]), [u5[1].id]: done(u5[1]), [u5[2].id]: done(u5[2]) },
+        submitted: { [u5[0].id]: 'verified', [u5[1].id]: 'verified', [u5[2].id]: 'verified' },
+        audio: {}, sideToday: 0, sideDone: [], chests: 0,
         fullCount: 9, earlyCount: 6, speakingCount: 4,
       },
     };
   };
+
   const Game = {
     DAMAGE, STATUS_FACTOR, STATUSES, FULL_BONUS, EARLY_HOURS, EARLY_MULT, LATE_MULT, STAR_MULT, ESTIMATE_STARS,
-    STREAK_MIN, STREAK_BONUS, REF_GUILD_SIZE, FORTRESS_HP, BOSS_HP_PER_MEMBER, SIDE_QUEST_DAILY_CAP, SIDE_QUEST_DAMAGE, HOUR, RANKS,
-    taskDamage, timingOf, calcDamage, sizeFactor, shieldPct, incomingMult, fortressDamage,
+    STREAK_MIN, STREAK_BONUS, FORTRESS_HP, BATTLE_CAP, BOSS_HP_PER_MEMBER, SIDE_QUEST_DAILY_CAP, SIDE_QUEST_DAMAGE, HOUR, RANKS,
+    taskDamage, timingOf, calcDamage, maxRaw, weeklyMax, shieldPct, incomingMult, fortressDamage,
     xpForLevel, levelFromXp, levelProgress, rankFor, seed,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = Game;

@@ -281,7 +281,7 @@
       h(Drift, { dx: 70, dur: 26 }, h('ellipse', { cx: 120, cy: 620, rx: 140, ry: 26, fill: '#6B6E8A', opacity: 0.22, filter: 'url(#blur8)' })),
       h(Drift, { dx: -80, dur: 32, delay: 3 }, h('ellipse', { cx: 300, cy: 790, rx: 150, ry: 30, fill: '#6B6E8A', opacity: 0.2, filter: 'url(#blur8)' })),
       h('rect', { width: MAP_W, height: MAP_H, fill: 'url(#vignette)' }),
-      LESSON_PTS.map(([x, y], i) => h(Coin, { key: i, x, y, state: states[i] })),
+      states.map((st, i) => h(Coin, { key: i, x: LESSON_PTS[i][0], y: LESSON_PTS[i][1], state: st })),
       bossAlive && h('circle', { cx: BOSS_PT[0], cy: BOSS_PT[1], r: 22, fill: '#8B5CF6', opacity: 0.35 },
         h('animate', { attributeName: 'r', values: '20;26;20', dur: '2.2s', repeatCount: 'indefinite' })));
   }, (a, b) => a.bossAlive === b.bossAlive && a.states.join() === b.states.join());
