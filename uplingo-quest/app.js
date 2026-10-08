@@ -4,14 +4,15 @@
   const { useState, useEffect, useMemo, useRef } = React;
   const h = React.createElement;
   const G = window.Game;
+  const { Icon, Crest, Banner, Chest, Mountains, WorldTerrain } = window.Art;
 
   // ---------------------------------------------------------------- storage
-  const STORE = 'uplingo-quest-v1';
+  const STORE = 'uplingo-quest-v2';
   const loadState = () => {
     try {
       const s = JSON.parse(localStorage.getItem(STORE));
       // A battle that ended while the demo was closed starts a fresh demo week.
-      if (s && s.version === 1 && Date.now() < s.battle.endsAt) return s;
+      if (s && s.version === 2 && Date.now() < s.battle.endsAt) return s;
     } catch (e) { /* storage blocked: fall through to a fresh seed */ }
     return G.seed();
   };
@@ -21,21 +22,17 @@
 
   // ---------------------------------------------------------------- helpers
   const cx = (...a) => a.filter(Boolean).join(' ');
-  const initials = (n) => n.split(/\s+/).map((x) => x[0]).join('').slice(0, 2).toUpperCase();
-  const firstName = (n) => n.split(' ')[0];
   const uid = () => Math.random().toString(36).slice(2, 9);
   const pad2 = (n) => String(n).padStart(2, '0');
-  const fmtCountdown = (ms) => {
-    const abs = Math.abs(ms);
+  const fmt = (n) => Math.round(n).toLocaleString('en-US');
+  const pct = (a, b) => Math.max(0, Math.min(100, Math.round((a / b) * 100)));
+  const fmtLeft = (ms) => {
+    const abs = Math.max(0, ms);
     const d = Math.floor(abs / 86400000), hh = Math.floor((abs % 86400000) / 3600000), m = Math.floor((abs % 3600000) / 60000);
-    if (d >= 1) return `${d}d ${hh}h`;
-    if (hh >= 1) return `${hh}h ${m}m`;
-    return `${m}m`;
-  };
-  const fmtClock = (ms) => {
-    const s = Math.max(0, Math.floor(ms / 1000));
-    const d = Math.floor(s / 86400), hh = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
-    return (d ? d + 'd ' : '') + pad2(hh) + ':' + pad2(m) + ':' + pad2(sec);
+    if (d >= 2) return d + ' days';
+    if (d === 1) return '1 day ' + hh + 'h';
+    if (hh >= 1) return hh + 'h ' + m + 'm';
+    return m + 'm';
   };
   const ago = (t, now) => {
     const ms = now - t;
@@ -44,48 +41,54 @@
     if (ms < 86400000) return Math.floor(ms / 3600000) + 'h ago';
     return Math.floor(ms / 86400000) + 'd ago';
   };
-  const TYPE_BADGE = { grammar: 'b-blue', vocab: 'b-yellow', writing: 'b-orange', speaking: 'b-lime', listening: 'b-purple', reading: 'b-teal' };
+  const TYPE_ICON = { vocab: 'book', grammar: 'doc', writing: 'pencil', speaking: 'mic', listening: 'headphones', reading: 'eye' };
+  const TYPE_NAME = { vocab: 'vocabulary', grammar: 'grammar', writing: 'writing', speaking: 'speaking', listening: 'listening', reading: 'reading' };
   const SEG_CLS = { 'Full': 'on-full', '75%': 'on-most', '50%': 'on-half', 'Not full': 'on-notfull' };
-  const pct = (a, b) => Math.max(0, Math.min(100, Math.round((a / b) * 100)));
+  const isMarked = (st) => st && st !== 'Not started' && st !== 'Not full';
 
-  // Everything the screens derive from state, computed once per render.
+  // Everything screens derive from state, computed once per render.
   const derive = (s, now) => {
     const { myGuild, battle, feed, homeworks, bosses, me } = s;
     const enemy = battle.enemy;
-    const myShield = G.shieldPct(myGuild.attackers.length, myGuild.members.length, me.charmUsed ? 0.05 : 0);
+    const attackers = myGuild.members.filter((m) => m.week > 0).length;
+    const myShield = G.shieldPct(attackers, myGuild.members.length, me.charmUsed ? 0.05 : 0);
     const enemyShield = G.shieldPct(enemy.attackers.length, enemy.members.length);
     const landed = (side) => feed.filter((f) => f.side === side && !f.pending).reduce((a, f) => a + f.dmg, 0);
-    const usHP = Math.max(0, G.FORTRESS_HP - landed('enemy'));
-    const enemyHP = Math.max(0, G.FORTRESS_HP - landed('us'));
+    const usHP = Math.max(0, G.FORTRESS_HP - battle.base.enemy - landed('enemy'));
+    const enemyHP = Math.max(0, G.FORTRESS_HP - battle.base.us - landed('us'));
     const pendingOnEnemy = feed.filter((f) => f.side === 'us' && f.pending).reduce((a, f) => a + f.dmg, 0);
-    const notAttacked = myGuild.members.filter((m) => !myGuild.attackers.includes(m.id)).length;
+    const notAttacked = myGuild.members.length - attackers;
     const liveBoss = bosses.filter((b) => !b.defeated).sort((a, b) => a.unit - b.unit)[0] || null;
     const currentUnit = liveBoss ? liveBoss.unit : Infinity;
     const locked = (hw) => hw.unit > currentUnit;
-    let myStop = homeworks.findIndex((hw) => !me.submitted[hw.id]);
-    if (myStop < 0) myStop = homeworks.length - 1;
+    const unitHws = homeworks.filter((hw) => hw.unit === Math.min(currentUnit, 99));
     const nextHw = homeworks.find((hw) => !me.submitted[hw.id] && !locked(hw)) || null;
-    const lvl = G.levelProgress(me.xp);
-    const rank = G.rankFor(me.seasonPts);
-    const pendingQueue = s.submissions.filter((x) => x.state === 'pending');
-    return { enemy, myShield, enemyShield, usHP, enemyHP, pendingOnEnemy, notAttacked, liveBoss, currentUnit, locked, myStop, nextHw, lvl, rank, pendingQueue, battleLeft: battle.endsAt - now };
+    const lessonIdx = nextHw ? unitHws.indexOf(nextHw) : unitHws.length;
+    const cur = nextHw ? (me.tasks[nextHw.id] || []) : [];
+    const curFrac = nextHw ? cur.filter(isMarked).length / nextHw.tasks.length : 0;
+    const doneInUnit = unitHws.filter((hw) => me.submitted[hw.id]).length;
+    const unitPct = unitHws.length ? pct(doneInUnit + curFrac, unitHws.length) : 100;
+    const unit = s.units.find((u) => u.unit === currentUnit) || s.units[s.units.length - 1];
+    return {
+      enemy, attackers, myShield, enemyShield, usHP, enemyHP, pendingOnEnemy, notAttacked, liveBoss, currentUnit, locked,
+      unitHws, nextHw, lessonIdx, doneInUnit, unitPct, unit, lvl: G.levelProgress(me.xp), rank: G.rankFor(me.seasonPts),
+      pendingQueue: s.submissions.filter((x) => x.state === 'pending'), battleLeft: battle.endsAt - now,
+      unitsDone: s.units.filter((u) => u.unit < currentUnit).length,
+    };
   };
 
   // ---------------------------------------------------------------- small UI
-  const Clay = ({ icon, color, size, round, style }) => h('div', { className: cx('clay', size, round && 'round'), style: { '--c': color, ...style } }, icon);
-  const Badge = ({ k, children }) => h('span', { className: cx('badge', k) }, children);
-  const HP = ({ value, max, color, pending = 0, size }) => h('div', { className: cx('hp', size) },
-    h('i', { style: { width: pct(value, max) + '%', background: color } }),
-    pending > 0 && h('i', { className: 'pending', style: { left: pct(Math.max(0, value - pending), max) + '%', width: pct(Math.min(pending, value), max) + '%' } }));
-  const PersonAv = ({ p, size = 34 }) => h('div', { className: 'av', style: { background: p.bg, width: size, height: size, fontSize: size * 0.36 } }, initials(p.name));
-
-  const MyAvatar = ({ s, size = 72 }) => {
+  const Face = ({ face, size = 36, ring }) => h('div', { className: 'av', style: { width: size, height: size, fontSize: size * 0.66, boxShadow: ring ? '0 0 0 2px ' + ring : null } }, face);
+  const MeAvatar = ({ s, size = 40, crown }) => {
     const av = s.shop.find((x) => x.id === s.me.avatar);
     const fr = s.shop.find((x) => x.id === s.me.frame);
-    return h('div', { className: 'frame-ring', style: { background: fr ? fr.css : 'var(--border-hi)', width: size + 8, height: size + 8 } },
-      h('div', { style: { width: size, height: size, borderRadius: '50%', background: 'radial-gradient(circle at 30% 25%, #2d3446, #151821)', display: 'grid', placeItems: 'center', fontSize: size * 0.52 } }, av ? av.icon : '🦊'));
+    return h('div', { className: 'av-ring', style: { background: fr ? fr.css : 'var(--blue)' } },
+      h(Face, { face: av ? av.icon : '🧑🏻‍🦱', size }),
+      crown && h('span', { className: 'crown' }, '👑'));
   };
-
+  const Badge = ({ k, children }) => h('span', { className: cx('badge', k) }, children);
+  const Bar = ({ value, max, color = 'var(--green)', style }) => h('div', { className: 'bar', style }, h('i', { style: { width: pct(value, max) + '%', background: color } }));
+  const VsBar = ({ us, them, thick }) => h('div', { className: cx('vsbar', thick && 'thick') }, h('i', { style: { width: pct(us, us + them) + '%' } }), h('b'));
   const Sheet = ({ onClose, children }) => {
     useEffect(() => {
       const k = (e) => { if (e.key === 'Escape') onClose(); };
@@ -95,366 +98,425 @@
     return h('div', { className: 'scrim', onClick: onClose },
       h('div', { className: 'sheet', role: 'dialog', 'aria-modal': true, onClick: (e) => e.stopPropagation() }, h('div', { className: 'grab' }), children));
   };
+  const Topbar = ({ title, left, right }) => h('header', { className: 'topbar' },
+    h('div', { style: { minWidth: 36 } }, left), h('div', { className: 'title' }, title), h('div', { style: { minWidth: 36, display: 'flex', justifyContent: 'flex-end' } }, right));
+  const SectionHead = ({ title, right }) => h('div', { className: 'row', style: { marginTop: 4 } }, h('div', { className: 'h2 grow' }, title), right);
 
-  const Section = ({ title, right, children }) => h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
-    h('div', { className: 'row' }, h('div', { className: 'eyebrow grow' }, title), right), children);
+  // Weekly battle summary card (Home + Guild).
+  const BattleCard = ({ s, d, onView, compact }) => h('div', { className: 'battle-card' },
+    !compact && h('div', { style: { fontWeight: 800, fontSize: 19, letterSpacing: 0.5 } }, 'WEEKLY BATTLE'),
+    !compact && h('div', { style: { marginTop: 2, color: '#E6E9F2' } }, fmtLeft(d.battleLeft) + ' left'),
+    compact && h('div', { className: 'row', style: { marginBottom: 4 } }, h('div', { className: 'grow', style: { fontWeight: 800, fontSize: 17, textAlign: 'left' } }, 'Weekly Battle'), h('span', { style: { color: 'var(--gold)', fontWeight: 600 } }, fmtLeft(d.battleLeft) + ' left')),
+    h('div', { className: 'row', style: { alignItems: 'flex-end', margin: '10px 0 12px' } },
+      h('div', { className: 'side' }, h('div', { className: 'float' }, h(Crest, { tone: 'blue', crest: s.myGuild.crest, size: compact ? 60 : 80 })),
+        h('div', { className: 'n' }, s.myGuild.name), h('div', { className: 'hp' }, fmt(d.usHP), h('small', null, 'HP'))),
+      h('div', { className: 'vs', style: { paddingBottom: compact ? 30 : 46 } }, 'VS'),
+      h('div', { className: 'side' }, h('div', { className: 'float', style: { animationDelay: '1.2s' } }, h(Crest, { tone: 'red', crest: d.enemy.crest, size: compact ? 60 : 80 })),
+        h('div', { className: 'n' }, d.enemy.name), h('div', { className: 'hp' }, fmt(d.enemyHP), h('small', null, 'HP')))),
+    h(VsBar, { us: d.usHP, them: d.enemyHP }),
+    h('button', { className: 'btn gold block', style: { marginTop: 14 }, onClick: onView }, 'View Battle'));
 
-  // ---------------------------------------------------------------- map
-  const STOP_GAP = 168, BANNER_H = 76, TOP_PAD = 24;
-  const xFor = (i) => 50 + 26 * Math.sin(i * 1.15 + 0.4);
+  // A homework task row with its state on the right.
+  const TaskRow = ({ task, status, audio, onClick, iconStyle = 'type' }) => {
+    const full = status === 'Full';
+    const part = isMarked(status) && !full;
+    let lead;
+    if (iconStyle === 'check') {
+      lead = task.type === 'speaking' && !isMarked(status)
+        ? h('div', { className: 'ico', style: { width: 26, color: 'var(--gold)' } }, h(Icon, { n: 'mic', s: 22 }))
+        : h('div', { className: cx('ck', full ? 'on' : part ? 'part' : 'off') }, full ? h(Icon, { n: 'check', s: 16, w: 3 }) : part ? status : null);
+    } else lead = h('div', { className: 'ico' }, h(Icon, { n: TYPE_ICON[task.type], s: 26, w: 1.8 }));
+    const trail = iconStyle === 'type' && full
+      ? h('div', { className: 'ck on' }, h(Icon, { n: 'check', s: 16, w: 3 }))
+      : iconStyle === 'type' && part ? h(Badge, { k: 'b-gold' }, status)
+        : h('span', { className: 'muted' }, h(Icon, { n: 'chevR', s: 20 }));
+    return h('button', { className: 'item', onClick },
+      lead,
+      h('div', { className: 'grow' },
+        h('div', { className: 't' }, task.label),
+        h('div', { className: 's' }, h('span', { className: 'dmg' }, '+' + G.DAMAGE[task.type] + ' damage'),
+          task.type === 'speaking' && audio ? ' · 🎧 ' + audio : '')),
+      trail);
+  };
 
-  const MapScreen = ({ s, d, now, openHw, go }) => {
-    const { homeworks, regions, myGuild, me, stopIcons, bosses } = s;
-    // Lay out banners and stops top-to-bottom.
-    const layout = [];
-    let y = TOP_PAD;
-    let lastUnit = null;
-    homeworks.forEach((hw, i) => {
-      if (hw.unit !== lastUnit) {
-        layout.push({ kind: 'banner', unit: hw.unit, y });
-        y += BANNER_H + 40;
-        lastUnit = hw.unit;
-      }
-      layout.push({ kind: 'stop', hw, i, x: xFor(i), y: y + 42 });
-      y += STOP_GAP;
+  // ---------------------------------------------------------------- Home
+  const HomeScreen = ({ s, d, openTask, openBattle, openNotifs, notifCount }) => {
+    const hw = d.nextHw;
+    const sts = hw ? (s.me.tasks[hw.id] || hw.tasks.map(() => 'Not started')) : [];
+    const done = sts.filter(isMarked).length;
+    return h('div', null,
+      h('header', { className: 'topbar' },
+        h(MeAvatar, { s, size: 38 }),
+        h('div', { className: 'grow', style: { fontWeight: 600 } }, s.school),
+        h('button', { className: 'icon-btn', onClick: openNotifs, 'aria-label': 'Notifications' }, h(Icon, { n: 'bell' }), notifCount > 0 && h('span', { className: 'dot' }))),
+      h('div', { className: 'page', style: { paddingTop: 4 } },
+        h('div', { className: 'card' },
+          h('div', { className: 'row' },
+            h('div', { className: 'grow' },
+              h('div', { style: { fontWeight: 700, fontSize: 15.5 } }, s.course.name),
+              h('div', { className: 'muted', style: { marginTop: 2 } }, 'Unit ' + d.unit.unit + ' · ' + d.unit.name)),
+            h('div', { className: 'num', style: { fontSize: 15 } }, d.unitPct + '%')),
+          h(Bar, { value: d.unitPct, max: 100, style: { marginTop: 12 } })),
+        h(BattleCard, { s, d, onView: openBattle }),
+        h(SectionHead, { title: 'Today\'s Homework', right: hw && h('span', { className: 'muted' }, done + '/' + hw.tasks.length) }),
+        hw
+          ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
+            hw.tasks.map((t, i) => h('div', { key: i, className: 'list' },
+              h(TaskRow, { task: t, status: sts[i], audio: (s.me.audio[hw.id] || {})[i], iconStyle: 'check', onClick: () => openTask(hw.id, i) }))))
+          : h('div', { className: 'card muted', style: { textAlign: 'center' } }, 'All homework is in. Nice work! 🎉')));
+  };
+
+  // ---------------------------------------------------------------- Map
+  const MapScreen = ({ s, d, openHw, goHomework, openLocked, openRaid, openInfo }) => {
+    const A = window.Art;
+    const L = A.LESSON_PTS, B = A.BOSS_PT, LK = A.LOCK_PTS;
+    const at = ([x, y]) => ({ left: (x / A.MAP_W) * 100 + '%', top: (y / A.MAP_H) * 100 + '%' });
+    const hws = d.unitHws;
+    const states = L.map((_, i) => {
+      const hw = hws[i];
+      if (!hw) return 'todo';
+      if (s.me.submitted[hw.id]) return 'done';
+      return d.nextHw && d.nextHw.id === hw.id ? 'current' : 'todo';
     });
-    const height = y + 20;
-    const stops = layout.filter((l) => l.kind === 'stop');
-    const seg = (a, b) => { const my = (a.y + b.y) / 2; return `C ${a.x} ${my} ${b.x} ${my} ${b.x} ${b.y}`; };
-    let donePath = '', restPath = '';
-    stops.forEach((st, k) => {
-      if (k === 0) return;
-      const prev = stops[k - 1];
-      const part = seg(prev, st);
-      if (k <= d.myStop) donePath += (donePath ? ' ' : `M ${prev.x} ${prev.y} `) + part;
-      else restPath += (restPath ? ' ' : `M ${prev.x} ${prev.y} `) + part;
-    });
-    const pinsAt = (i) => {
-      const list = myGuild.members.filter((m) => (m.me ? d.myStop : Math.min(m.stop, homeworks.length - 1)) === i);
-      list.sort((a, b) => (b.me ? 1 : 0) - (a.me ? 1 : 0));
-      return list;
-    };
-    const next = d.nextHw;
-    const earlyLeft = next ? next.dueAt - G.EARLY_HOURS * G.HOUR - now : 0;
+    // Teammates by lesson (lesson is 1-based in the seed).
+    const mates = s.myGuild.members.filter((m) => !m.me);
+    const byLesson = (i) => mates.filter((m) => m.lesson - 1 === i);
+    const myIdx = Math.min(d.lessonIdx, L.length - 1);
+    const nextUnit = s.units.find((u) => u.unit === d.currentUnit + 1);
+    return h('div', null,
+      h('div', { className: 'map-head' },
+        h('div', { style: { width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#4E8A3E,#2B7CC4)', display: 'grid', placeItems: 'center', fontSize: 24, boxShadow: '0 4px 10px rgba(0,0,0,0.4)' } }, '🗺️'),
+        h('div', { className: 'grow' }, h('div', { className: 'h1' }, 'World Map'), h('div', { className: 'muted tiny' }, s.course.name + ' · ' + d.unitsDone + '/' + s.course.units + ' units')),
+        h('button', { className: 'icon-btn', onClick: openInfo, 'aria-label': 'About the map' }, h(Icon, { n: 'info' }))),
+      h('div', { className: 'map-wrap', style: { marginTop: -68 } },
+        h(WorldTerrain, { states, bossAlive: !!d.liveBoss }),
+        h('div', { className: 'map-ov' },
+          h('button', { className: 'map-card', style: at([300, 150]), onClick: goHomework },
+            h('div', { className: 'grow' }, h('div', { className: 't' }, 'Unit ' + d.unit.unit), h('div', { className: 's', style: { color: '#E6E9F2' } }, d.unit.name), h('div', { className: 's' }, d.doneInUnit + '/' + hws.length + ' lessons')),
+            h('span', { style: { color: 'var(--text-2)' } }, h(Icon, { n: 'chevR', s: 18 }))),
+          L.map((p, i) => hws[i] && h('button', { key: 'n' + i, className: 'node-hit', style: at(p), onClick: () => openHw(hws[i].id), 'aria-label': 'Lesson ' + (i + 1) + ': ' + hws[i].title })),
+          L.map((p, i) => {
+            const list = byLesson(i);
+            if (!list.length || (i === myIdx && d.nextHw)) return null;
+            const off = i % 2 ? -42 : 42;
+            return h('div', { key: 'p' + i, className: 'pin', style: { left: `calc(${at(p).left} + ${off}px)`, top: `calc(${at(p).top} + 4px)` } },
+              h('div', { className: 'face' }, h(Face, { face: list[0].face, size: 38 })),
+              h('div', { className: 'tip' }),
+              list.length > 1 && h('span', { className: 'badge b-gold', style: { position: 'absolute', top: -6, right: -16, background: '#3A2A08' } }, '+' + (list.length - 1)));
+          }),
+          d.nextHw && h('div', { className: 'pin me', style: { left: at(L[myIdx]).left, top: `calc(${at(L[myIdx]).top} - 6px)` } },
+            h('div', { className: 'face' }, h(Face, { face: (s.shop.find((x) => x.id === s.me.avatar) || {}).icon, size: 44 })),
+            h('div', { className: 'tip' })),
+          d.liveBoss && h('button', { className: 'lock-badge', onClick: openRaid, style: { ...at(B), width: 46, height: 46, fontSize: 24, borderColor: '#B9A2FF', background: 'radial-gradient(circle at 35% 30%, #8B5CF6, #3D1D8F)' }, 'aria-label': 'Boss raid: ' + d.liveBoss.name }, d.liveBoss.icon),
+          LK.map((p, i) => h('button', { key: 'l' + i, className: 'lock-badge', style: at(p), onClick: openLocked, 'aria-label': 'Locked' }, h(Icon, { n: 'lock', s: 18 }))),
+          h('button', { className: 'map-card lock', style: at([100, 590]), onClick: openLocked },
+            h('div', { className: 'grow' }, h('div', { className: 't', style: { color: '#C9D0DC' } }, 'Unit ' + (d.currentUnit + 1)), h('div', { className: 's' }, nextUnit ? 'Locked · ' + nextUnit.name : 'Locked')),
+            h(Icon, { n: 'chevR', s: 18 })))));
+  };
+
+  // ---------------------------------------------------------------- Homework
+  const HomeworkScreen = ({ s, d, now, hwSel, setHwSel, openTask, openQuests, submit }) => {
+    const [tab, setTab] = useState('current');
+    const hw = s.homeworks.find((x) => x.id === hwSel) || d.nextHw || s.homeworks[0];
+    const sts = s.me.tasks[hw.id] || hw.tasks.map(() => 'Not started');
+    const audio = s.me.audio[hw.id] || {};
+    const sub = s.me.submitted[hw.id];
+    const est = G.calcDamage({ hw, statuses: sts, audio, submittedAt: now, streak: s.me.streak });
+    const fortress = G.fortressDamage(est.total, s.myGuild.members.length, d.enemyShield);
+    const anyDone = sts.some(isMarked);
+    const completed = s.homeworks.filter((x) => s.me.submitted[x.id]);
+    const upcoming = s.homeworks.filter((x) => !s.me.submitted[x.id] && x.id !== (d.nextHw && d.nextHw.id));
+    const mySub = s.submissions.find((x) => x.who === s.me.id && x.hwId === hw.id);
+    const isLocked = d.locked(hw);
 
     return h('div', null,
-      h('div', { className: 'page', style: { paddingBottom: 6 } },
-        h('div', null,
-          h('div', { className: 'eyebrow' }, s.myGuild.emblem + ' Guild ' + myGuild.name + ' · Navigate B1'),
-          h('h1', { className: 'h1', style: { marginTop: 4 } }, firstName(me.name) + ', your guild needs you')),
-        // Mini battle strip.
-        h('button', { className: 'card', onClick: () => go('battle'), style: { textAlign: 'left', padding: 12 } },
-          h('div', { className: 'row', style: { marginBottom: 8 } },
-            h('span', { className: 'tiny', style: { fontWeight: 700 } }, myGuild.emblem + ' ' + myGuild.name),
-            h('span', { className: 'vs grow', style: { textAlign: 'center' } }, 'VS'),
-            h('span', { className: 'tiny', style: { fontWeight: 700 } }, d.enemy.name + ' ' + d.enemy.emblem)),
-          h('div', { className: 'row' },
-            h('div', { className: 'grow' }, h(HP, { value: d.usHP, max: G.FORTRESS_HP, color: 'var(--lime)', size: 'thin' })),
-            h('div', { className: 'grow' }, h(HP, { value: d.enemyHP, max: G.FORTRESS_HP, color: 'var(--orange)', pending: d.pendingOnEnemy, size: 'thin' }))),
-          h('div', { className: 'row tiny muted', style: { marginTop: 8 } },
-            h('span', { className: 'num', style: { color: 'var(--lime)' } }, pct(d.usHP, G.FORTRESS_HP) + '%'),
-            h('span', { className: 'grow', style: { textAlign: 'center' } }, '⏱ ' + fmtCountdown(d.battleLeft) + ' left'),
-            h('span', { className: 'num', style: { color: 'var(--orange)' } }, pct(d.enemyHP, G.FORTRESS_HP) + '%'))),
-        next && h('div', { className: 'card glow-lime' },
-          h('div', { className: 'row' },
-            h(Clay, { icon: stopIcons[next.id], color: (regions.find((r) => r.unit === next.unit) || {}).color }),
+      h(Topbar, { title: 'Homework' }),
+      h('div', { className: 'page', style: { paddingTop: 0 } },
+        h('div', { className: 'utabs' }, [['current', 'Current'], ['completed', 'Completed'], ['upcoming', 'Upcoming']].map(([k, l]) => h('button', { key: k, className: tab === k ? 'on' : '', onClick: () => setTab(k) }, l))),
+        tab === 'current' && h(React.Fragment, null,
+          h('div', { className: 'hero' },
+            h(Mountains),
+            h('div', { className: 'content' },
+              h('div', { style: { color: '#D8DDF0', fontSize: 13.5 } }, 'Unit ' + hw.unit + ' · Lesson ' + hw.lesson),
+              h('div', { className: 'h1', style: { margin: '4px 0 10px' } }, hw.title),
+              h('span', { className: 'badge', style: { background: 'rgba(10,17,32,0.55)', color: '#E6E9F2', padding: '5px 10px' } },
+                h(Icon, { n: 'clock', s: 13 }), hw.dueAt < now ? 'Overdue' : fmtLeft(hw.dueAt - now) + ' left'))),
+          h('div', { className: 'list' },
+            hw.tasks.map((t, i) => h(TaskRow, { key: i, task: t, status: sts[i], audio: audio[i], onClick: () => openTask(hw.id, i) }))),
+          h('div', { className: 'list' },
+            h('button', { className: 'item', onClick: openQuests },
+              h('div', { className: 'ico', style: { color: 'var(--gold)' } }, h(Icon, { n: 'star', s: 28 })),
+              h('div', { className: 'grow' }, h('div', { className: 't' }, 'Extra quest (optional)'), h('div', { className: 's' }, '+5 coins · ' + Math.max(0, G.SIDE_QUEST_DAILY_CAP - s.me.sideToday) + ' rewards left today')),
+              h('span', { className: 'muted' }, h(Icon, { n: 'chevR', s: 20 })))),
+          h('div', { className: 'card row', style: { borderColor: est.allFull ? 'var(--gold)' : 'rgba(245,184,61,0.35)', background: 'linear-gradient(90deg, rgba(245,184,61,0.12), rgba(245,184,61,0.03))' } },
+            h(Chest, { size: 54, open: est.allFull }),
             h('div', { className: 'grow' },
-              h('div', { className: 'eyebrow', style: { color: 'var(--lime)' } }, 'Next stop'),
-              h('div', { className: 'h2', style: { marginTop: 2 } }, next.title),
-              h('div', { className: 'tiny muted' }, 'Due in ' + fmtCountdown(next.dueAt - now) + ' · ' + next.tasks.length + ' tasks'))),
-          earlyLeft > 0 && h('div', { className: 'row tiny', style: { marginTop: 12, padding: '8px 10px', borderRadius: 10, background: 'var(--gold-soft)', color: 'var(--gold)', fontWeight: 700 } },
-            '⚡ Early Strike ×1.5 for ' + fmtCountdown(earlyLeft)),
-          h('button', { className: 'btn primary block', style: { marginTop: 12 }, onClick: () => openHw(next.id) }, '⚔️  Start this homework'))),
-
-      h('div', { className: 'map', style: { height } },
-        h('svg', { className: 'path', viewBox: `0 0 100 ${height}`, preserveAspectRatio: 'none', 'aria-hidden': true },
-          restPath && h('path', { d: restPath, fill: 'none', stroke: '#3A4156', strokeWidth: 3, strokeDasharray: '2 10', strokeLinecap: 'round', vectorEffect: 'non-scaling-stroke' }),
-          donePath && h('path', { d: donePath, fill: 'none', stroke: 'var(--lime)', strokeWidth: 4, strokeLinecap: 'round', vectorEffect: 'non-scaling-stroke', style: { filter: 'drop-shadow(0 0 6px rgba(168,230,61,0.6))' } })),
-        layout.map((l) => {
-          if (l.kind === 'banner') {
-            const r = regions.find((x) => x.unit === l.unit);
-            const boss = bosses.find((b) => b.unit === l.unit);
-            const isLocked = l.unit > d.currentUnit;
-            const sub = isLocked
-              ? '🔒 Unlocks when the guild defeats ' + (d.liveBoss ? d.liveBoss.name : 'the current boss')
-              : boss ? (boss.defeated ? '✓ Boss defeated · ' + boss.name : '⚔️ Boss: ' + boss.name + ' · ' + pct(boss.hp - boss.dealt, boss.hp) + '% HP') : 'Cleared';
-            return h('div', { key: 'b' + l.unit, className: cx('region-banner', isLocked && 'locked'), style: { top: l.y } },
-              h(Clay, { icon: r.icon, color: r.color, size: 'sm' }),
-              h('div', { className: 'grow' },
-                h('div', { className: 'eyebrow' }, 'Unit ' + l.unit),
-                h('div', { style: { fontWeight: 800, fontFamily: 'var(--font-display)' } }, r.name),
-                h('div', { className: 'tiny muted', style: { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, sub)),
-              boss && !boss.defeated && !isLocked && h('button', { className: 'btn ghost sm', onClick: () => go('raid') }, 'Raid'));
-          }
-          const { hw, i } = l;
-          const st = s.me.submitted[hw.id];
-          const isLocked = d.locked(hw);
-          const isCurrent = !isLocked && d.nextHw && d.nextHw.id === hw.id;
-          const r = regions.find((x) => x.unit === hw.unit);
-          const pins = pinsAt(i);
-          return h(React.Fragment, { key: hw.id },
-            pins.length > 0 && h('div', { className: 'pins', style: { left: l.x + '%', top: l.y - 82 } },
-              pins.slice(0, 4).map((m) => h('div', { key: m.id, className: cx('pin', m.me && 'me'), title: m.name, style: { background: m.bg } }, m.me ? (s.shop.find((x) => x.id === me.avatar) || {}).icon : initials(m.name))),
-              pins.length > 4 && h('div', { className: 'pin more' }, '+' + (pins.length - 4))),
-            h('button', { className: cx('stop', isLocked && 'locked', isCurrent && 'current'), style: { left: l.x + '%', top: l.y + 14 }, onClick: () => openHw(hw.id), 'aria-label': hw.title },
-              h('div', { className: 'island', style: { '--c': isLocked ? '#2A2F3D' : r.color, animationDelay: (i * 0.7) + 's' } },
-                isLocked ? '🔒' : stopIcons[hw.id],
-                st && h('div', { className: 'state', style: { background: st === 'verified' ? 'var(--lime)' : 'var(--gold)', color: '#0b0d12' } }, st === 'verified' ? '✓' : '⏳')),
-              h('div', { className: 'lbl' }, hw.title.replace('Unit ' + hw.unit + ' · ', '')),
-              !isLocked && !st && h('div', { className: 'tiny', style: { color: hw.dueAt < now ? 'var(--red)' : 'var(--text-2)', fontWeight: 600 } }, hw.dueAt < now ? 'Overdue' : 'Due ' + fmtCountdown(hw.dueAt - now))));
-        })));
+              h('div', { style: { color: 'var(--gold)', fontWeight: 800, fontSize: 15 } }, 'Full homework bonus'),
+              h('div', { style: { color: 'var(--gold)', fontSize: 13 } }, est.allFull ? 'All main tasks Full — bonus unlocked!' : 'Complete all main tasks'),
+              h('div', { style: { color: 'var(--gold)', fontSize: 13, fontWeight: 700 } }, '+' + G.FULL_BONUS + ' damage + a chest'))),
+          sub
+            ? h('div', { className: 'card', style: { borderColor: sub === 'verified' ? 'var(--green)' : 'var(--gold)' } },
+              sub === 'verified'
+                ? h('div', { style: { color: 'var(--green)', fontWeight: 700 } }, '✓ Approved by your teacher' + (mySub && mySub.dmg ? ' · ' + mySub.dmg + ' damage landed' : ''))
+                : h('div', { style: { color: 'var(--gold)', fontWeight: 700 } }, '⏳ ' + fortress + ' damage pending — lands when your teacher checks it'))
+            : isLocked
+              ? h('div', { className: 'card muted', style: { textAlign: 'center' } }, '🔒 Unlocks when your guild defeats ' + (d.liveBoss ? d.liveBoss.name : 'the boss'))
+              : h('div', { className: 'card' },
+                h('div', { className: 'row tiny muted', style: { flexWrap: 'wrap', gap: 6 } },
+                  h('span', null, 'Tasks ' + est.base),
+                  est.fullBonus > 0 && h(Badge, { k: 'b-gold' }, '+' + est.fullBonus + ' bonus'),
+                  est.timing === 'early' && h(Badge, { k: 'b-gold' }, '⚡ Early Strike ×1.5'),
+                  est.timing === 'late' && h(Badge, { k: 'b-red' }, 'Late ×0.5'),
+                  est.streakMult > 1 && h(Badge, { k: 'b-red' }, '🔥 Streak +10%'),
+                  h('span', null, '· assumes ★★')),
+                h('button', { className: 'btn gold block', style: { marginTop: 12 }, disabled: !anyDone, onClick: () => submit(hw, sts, audio, est, fortress) },
+                  h(Icon, { n: 'swords', s: 18 }), anyDone ? 'Attack the Dragons · ' + fortress + ' damage' : 'Mark a task to attack'))),
+        tab === 'completed' && h('div', { className: 'list' },
+          completed.length ? completed.slice().reverse().map((x) => {
+            const sx = s.submissions.find((y) => y.who === s.me.id && y.hwId === x.id);
+            const ok = s.me.submitted[x.id] === 'verified';
+            return h('button', { key: x.id, className: 'item', onClick: () => { setHwSel(x.id); setTab('current'); } },
+              h('div', { className: cx('ck', ok ? 'on' : 'part') }, ok ? h(Icon, { n: 'check', s: 16, w: 3 }) : '⏳'),
+              h('div', { className: 'grow' }, h('div', { className: 't' }, x.title), h('div', { className: 's' }, 'Unit ' + x.unit + ' · Lesson ' + x.lesson + (sx && sx.dmg ? ' · ' : ''), sx && sx.dmg ? h('span', { className: 'dmg' }, sx.dmg + ' damage') : null)),
+              h('span', { className: 'muted' }, h(Icon, { n: 'chevR', s: 20 })));
+          }) : h('div', { className: 'item muted' }, 'Nothing yet')),
+        tab === 'upcoming' && h('div', { className: 'list' },
+          upcoming.map((x) => {
+            const lk = d.locked(x);
+            return h('button', { key: x.id, className: 'item', style: { opacity: lk ? 0.55 : 1 }, onClick: () => { setHwSel(x.id); setTab('current'); } },
+              h('div', { className: 'ico' }, h(Icon, { n: lk ? 'lock' : 'clock', s: 22 })),
+              h('div', { className: 'grow' }, h('div', { className: 't' }, x.title), h('div', { className: 's' }, 'Unit ' + x.unit + ' · Lesson ' + x.lesson + ' · ' + (lk ? 'locked' : 'due in ' + fmtLeft(x.dueAt - now)))),
+              h('span', { className: 'muted' }, h(Icon, { n: 'chevR', s: 20 })));
+          }))));
   };
 
-  // ---------------------------------------------------------------- homework sheet
-  const HomeworkSheet = ({ s, d, now, hwId, onClose, submit }) => {
-    const hw = s.homeworks.find((x) => x.id === hwId);
-    const sub = s.submissions.find((x) => x.who === s.me.id && x.hwId === hwId);
-    const prior = s.me.tasks[hwId];
-    const [statuses, setStatuses] = useState(() => prior || hw.tasks.map(() => 'Not started'));
-    const [audio, setAudio] = useState(() => (sub && sub.audio) || (s.me.audio[hwId] || {}));
-    const [recording, setRecording] = useState(null);
-    const isLocked = d.locked(hw);
-    const readOnly = !!s.me.submitted[hwId];
-    const r = s.regions.find((x) => x.unit === hw.unit);
-
-    useEffect(() => {
-      if (recording === null) return undefined;
-      const t = setTimeout(() => {
-        const secs = 35 + Math.floor(Math.random() * 40);
-        setAudio((a) => ({ ...a, [recording]: '0:' + pad2(secs) }));
-        setRecording(null);
-      }, 2200);
-      return () => clearTimeout(t);
-    }, [recording]);
-
-    const est = G.calcDamage({ hw, statuses, audio, submittedAt: sub ? sub.submittedAt : now, streak: s.me.streak, stars: sub && sub.stars ? sub.stars : G.ESTIMATE_STARS });
-    const fortress = G.fortressDamage(est.total, s.myGuild.members.length, d.enemyShield);
-    const anyDone = statuses.some((x) => x !== 'Not started' && x !== 'Not full');
-
-    if (isLocked) {
-      return h(Sheet, { onClose },
-        h('div', { style: { textAlign: 'center', padding: '10px 0 6px' } },
-          h(Clay, { icon: '🔒', color: '#2A2F3D', size: 'lg', style: { margin: '0 auto 14px' } }),
-          h('div', { className: 'h1' }, hw.title),
-          h('p', { className: 'muted' }, 'This region unlocks when your guild defeats ' + (d.liveBoss ? d.liveBoss.name : 'the current boss') + '. Every homework in Unit ' + d.currentUnit + ' brings it closer.'),
-          h('button', { className: 'btn ghost block', onClick: onClose }, 'Got it')));
-    }
-
-    return h(Sheet, { onClose },
-      h('div', { className: 'row', style: { marginBottom: 14 } },
-        h(Clay, { icon: s.stopIcons[hw.id], color: r.color }),
-        h('div', { className: 'grow' },
-          h('div', { className: 'eyebrow' }, 'Unit ' + hw.unit + ' · ' + r.name),
-          h('div', { className: 'h1', style: { fontSize: 20 } }, hw.title),
-          h('div', { className: 'tiny muted' }, (hw.dueAt < now ? 'Overdue by ' : 'Due in ') + fmtCountdown(hw.dueAt - now)))),
-      readOnly && h('div', { className: 'card', style: { marginBottom: 12, padding: 12, background: s.me.submitted[hwId] === 'verified' ? 'var(--lime-soft)' : 'var(--gold-soft)', borderColor: 'transparent' } },
-        s.me.submitted[hwId] === 'verified'
-          ? h('div', { style: { fontWeight: 700, color: 'var(--lime)' } }, '✓ Verified by your teacher' + (sub && sub.dmg ? ' · ' + sub.dmg + ' damage landed' : ''))
-          : h('div', { style: { fontWeight: 700, color: 'var(--gold)' } }, '⏳ ~' + fortress + ' damage pending · lands when your teacher verifies')),
-      h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
-        hw.tasks.map((t, i) => h('div', { key: i, className: 'task' },
-          h('div', { className: 'row' },
-            h('div', { className: 'grow', style: { fontWeight: 600 } }, t.label),
-            h(Badge, { k: TYPE_BADGE[t.type] }, t.type),
-            h('span', { className: 'num tiny', style: { color: 'var(--text-2)', minWidth: 34, textAlign: 'right' } }, '⚔ ' + G.DAMAGE[t.type])),
-          h('div', { className: 'seg' },
-            G.STATUSES.map((x) => h('button', { key: x, disabled: readOnly, className: statuses[i] === x ? SEG_CLS[x] : '', onClick: () => setStatuses((a) => a.map((v, j) => (j === i ? x : v))) }, x))),
-          t.type === 'speaking' && h('div', { className: 'row tiny' },
-            audio[i]
-              ? h(React.Fragment, null, h('span', { style: { color: 'var(--lime)', fontWeight: 700 } }, '🎧 Recording attached · ' + audio[i]), !readOnly && h('button', { className: 'muted', style: { marginLeft: 'auto', textDecoration: 'underline' }, onClick: () => setAudio((a) => { const n = { ...a }; delete n[i]; return n; }) }, 'Re-record'))
-              : recording === i
-                ? h(React.Fragment, null, h('span', { className: 'rec' }), h('span', { style: { fontWeight: 700 } }, 'Recording…'))
-                : h(React.Fragment, null,
-                  h('span', { style: { color: 'var(--orange)', fontWeight: 600 } }, 'Speaking only counts with real audio'),
-                  !readOnly && h('button', { className: 'btn ghost sm', style: { marginLeft: 'auto' }, onClick: () => setRecording(i) }, '🎙 Record')))))),
-
-      // Damage preview.
-      h('div', { className: 'card', style: { marginTop: 12, padding: 14, background: 'var(--bg-2)' } },
-        h('div', { className: 'eyebrow', style: { marginBottom: 8 } }, readOnly ? 'Damage' : 'Damage preview'),
-        h('div', { style: { display: 'grid', gridTemplateColumns: '1fr auto', gap: '4px 12px', fontSize: 13 } },
-          h('span', { className: 'muted' }, 'Tasks'), h('span', { className: 'num' }, est.base),
-          h('span', { className: 'muted' }, 'Full homework bonus'), h('span', { className: 'num', style: { color: est.fullBonus ? 'var(--lime)' : 'var(--text-3)' } }, '+' + est.fullBonus),
-          h('span', { className: 'muted' }, est.timing === 'early' ? '⚡ Early Strike' : est.timing === 'late' ? '🐢 Late submission' : 'On time'), h('span', { className: 'num', style: { color: est.timing === 'early' ? 'var(--gold)' : est.timing === 'late' ? 'var(--red)' : 'var(--text-3)' } }, '×' + est.timingMult),
-          h('span', { className: 'muted' }, s.me.streak >= G.STREAK_MIN ? '🔥 Streak ' + s.me.streak : '🔥 Streak ' + s.me.streak + ' (bonus from ' + G.STREAK_MIN + ')'), h('span', { className: 'num', style: { color: est.streakMult > 1 ? 'var(--orange)' : 'var(--text-3)' } }, '×' + est.streakMult),
-          h('span', { className: 'muted' }, sub && sub.stars ? 'Teacher rating ' + '★'.repeat(sub.stars) : 'Teacher rating (assumes ★★)'), h('span', { className: 'num' }, '×' + est.starMult),
-          h('span', { className: 'muted' }, 'Guild size & enemy shield'), h('span', { className: 'num' }, '×' + (fortress / Math.max(1, est.total)).toFixed(2))),
-        h('div', { className: 'row', style: { marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' } },
-          h('span', { className: 'grow', style: { fontWeight: 700 } }, 'Fortress damage'),
-          h('span', { className: 'num', style: { fontSize: 26, color: 'var(--lime)' } }, fortress)),
-        h('div', { className: 'tiny muted', style: { marginTop: 4 } }, 'A 3★ rating from your teacher makes it a Critical Hit (×2).')),
-
-      !readOnly && h('button', { className: 'btn primary block', style: { marginTop: 14, padding: 15, fontSize: 15 }, disabled: !anyDone,
-        onClick: () => { submit(hw, statuses, audio, est, fortress); onClose(); } }, anyDone ? '⚔️  Attack ' + d.enemy.name + ' · ' + fortress : 'Mark at least one task to attack'));
-  };
-
-  // ---------------------------------------------------------------- battle + feed
-  const FeedList = ({ s, now, items, fresh }) => h('div', null,
+  // ---------------------------------------------------------------- Battle
+  const feedIcon = (what) => /writing/.test(what) ? 'pencil' : /speaking/.test(what) ? 'mic' : /grammar/.test(what) ? 'doc' : /vocab/.test(what) ? 'book' : /bonus|full/.test(what) ? 'gift' : /quest/.test(what) ? 'star' : 'swords';
+  const ActivityList = ({ s, now, items, fresh }) => h('div', { className: 'list' },
     items.map((f) => {
       const ours = f.side === 'us';
-      const who = ours ? (s.myGuild.members.find((m) => m.name === f.who) || { name: f.who, bg: '#A8E63D' }) : (s.battle.enemy.members.find((m) => m.name === f.who) || { name: f.who, bg: '#F97316' });
-      return h('div', { key: f.id, className: cx('feed-item', fresh === f.id && 'new') },
-        h(PersonAv, { p: who }),
+      const pool = ours ? s.myGuild.members : s.battle.enemy.members;
+      const who = pool.find((m) => m.name === f.who) || { face: '🧑' };
+      const ic = feedIcon(f.what);
+      const iconColor = ic === 'gift' || ic === 'star' ? 'var(--gold)' : ic === 'mic' ? 'var(--red-hi)' : 'var(--cream)';
+      const face = f.who === s.me.name ? (s.shop.find((x) => x.id === s.me.avatar) || {}).icon : who.face;
+      return h('div', { key: f.id, className: cx('item feed-item', fresh === f.id && 'new') },
+        h(Face, { face, size: 40, ring: ours ? 'var(--blue)' : 'var(--red)' }),
+        h('div', { style: { color: iconColor } }, h(Icon, { n: ic, s: 20 })),
         h('div', { className: 'grow' },
-          h('div', { style: { fontSize: 13.5 } },
-            h('b', null, f.who === s.me.name ? 'You' : f.who), ours ? ' hit ' + s.battle.enemy.name + '\'s fortress' : ' hit your fortress',
-            f.pending ? ' (pending)' : ''),
-          h('div', { className: 'row tiny muted', style: { gap: 6, marginTop: 3, flexWrap: 'wrap' } },
-            h('span', null, ago(f.at, now)),
-            f.crit && h(Badge, { k: 'b-gold' }, '💥 Critical Hit'),
-            f.early && h(Badge, { k: 'b-yellow' }, '⚡ Early Strike'),
-            f.quest && h(Badge, { k: 'b-purple' }, 'Side quest'),
-            f.pending && h(Badge, { k: 'b-grey' }, '⏳ Awaiting teacher'))),
-        h('div', { className: 'num', style: { fontSize: 20, color: f.pending ? 'var(--text-3)' : ours ? 'var(--lime)' : 'var(--orange)' } }, (ours ? '−' : '−') + f.dmg));
+          h('div', { style: { fontSize: 13.5 } }, h('b', { style: { fontWeight: 600 } }, f.who === s.me.name ? 'You' : f.who), ours ? '' : ' (Dragons)', ' ' + f.what),
+          h('div', { className: 'row', style: { gap: 6, marginTop: 2, flexWrap: 'wrap' } },
+            h('span', { style: { color: f.pending ? 'var(--text-3)' : ours ? 'var(--green)' : 'var(--red-hi)', fontWeight: 700 } }, (ours ? '+' : '−') + f.dmg + ' damage'),
+            f.crit && h(Badge, { k: 'b-gold' }, '💥 Critical'),
+            f.early && h(Badge, { k: 'b-gold' }, '⚡ Early'),
+            f.pending && h(Badge, { k: 'b-grey' }, '⏳ Pending'))),
+        h('div', { className: 'tiny muted', style: { alignSelf: 'flex-end', whiteSpace: 'nowrap' } }, ago(f.at, now)));
     }));
 
-  const BattleScreen = ({ s, d, now, fresh, toggleDuel }) => {
-    const [tab, setTab] = useState('battle');
-    const { myGuild } = s;
-    const enemy = d.enemy;
+  const BattleScreen = ({ s, d, now, fresh, back, openRules }) => {
     const feed = [...s.feed].sort((a, b) => b.at - a.at);
-    const myWeek = s.feed.filter((f) => f.side === 'us' && f.who === s.me.name && !f.pending).reduce((a, f) => a + f.dmg, 0);
-    const Fort = ({ g, hp, color, shield, pending, mine }) => h('div', { className: 'card', style: { padding: 14 } },
-      h('div', { className: 'row' },
-        h(Clay, { icon: g.emblem, color, size: 'sm' }),
-        h('div', { className: 'grow' },
-          h('div', { style: { fontWeight: 800, fontFamily: 'var(--font-display)' } }, g.name + (mine ? ' · you' : '')),
-          h('div', { className: 'tiny muted' }, g.teacher + ' · ' + g.members.length + ' members')),
-        h('div', { style: { textAlign: 'right' } },
-          h('div', { className: 'num', style: { fontSize: 24, color } }, hp),
-          h('div', { className: 'tiny muted' }, '/ ' + G.FORTRESS_HP + ' HP'))),
-      h('div', { style: { marginTop: 10 } }, h(HP, { value: hp, max: G.FORTRESS_HP, color, pending, size: 'big' })),
-      h('div', { className: 'row tiny', style: { marginTop: 8, color: 'var(--text-2)' } },
-        h('span', null, '🛡️ Shield ' + Math.round(shield * 100) + '%'),
-        h('span', { className: 'grow' }),
-        h('span', null, 'Takes ×' + G.incomingMult(shield).toFixed(2) + ' damage')),
-      pending > 0 && h('div', { className: 'tiny', style: { marginTop: 6, color: 'var(--gold)', fontWeight: 600 } }, '⏳ ' + pending + ' damage pending teacher verification'));
-
-    return h('div', { className: 'page' },
-      h('div', { className: 'row' },
-        h('div', { className: 'grow' },
-          h('div', { className: 'eyebrow' }, 'Weekly Guild Battle · B1'),
-          h('h1', { className: 'h1' }, 'Battle')),
-        h('div', { style: { textAlign: 'right' } },
-          h('div', { className: 'eyebrow' }, 'Ends in'),
-          h('div', { className: 'num', style: { fontSize: 22, color: d.battleLeft < 86400000 ? 'var(--red)' : 'var(--text)' } }, fmtClock(d.battleLeft)))),
-      h('div', { className: 'pill-tabs' },
-        h('button', { className: tab === 'battle' ? 'on' : '', onClick: () => setTab('battle') }, '⚔️ Battle'),
-        h('button', { className: tab === 'feed' ? 'on' : '', onClick: () => setTab('feed') }, '📡 Live feed'),
-        h('button', { className: tab === 'duel' ? 'on' : '', onClick: () => setTab('duel') }, '🤺 Duel')),
-      tab === 'battle' && h(React.Fragment, null,
-        h(Fort, { g: myGuild, hp: d.usHP, color: 'var(--lime)', shield: d.myShield, mine: true }),
-        h('div', { className: 'vs', style: { textAlign: 'center', margin: '-4px 0' } }, 'VS'),
-        h(Fort, { g: enemy, hp: d.enemyHP, color: 'var(--orange)', shield: d.enemyShield, pending: d.pendingOnEnemy }),
-        h('div', { className: cx('card', d.notAttacked > 0 ? 'glow-red' : 'glow-lime'), style: { padding: 14 } },
-          d.notAttacked > 0
-            ? h('div', null,
-              h('div', { style: { fontWeight: 800 } }, d.notAttacked + ' of ' + myGuild.members.length + ' teammates haven\'t attacked yet'),
-              h('div', { className: 'tiny muted', style: { marginTop: 3 } }, 'Every attacker raises the guild shield, so the enemy hits softer. Names stay private.'))
-            : h('div', { style: { fontWeight: 800, color: 'var(--lime)' } }, 'Full guild has attacked — shield at maximum! 🛡️')),
-        h('div', { className: 'grid2' },
-          h('div', { className: 'stat' }, h('div', { className: 'eyebrow' }, 'Your damage'), h('div', { className: 'v', style: { color: 'var(--lime)' } }, myWeek), h('div', { className: 'tiny muted' }, 'this battle')),
-          h('div', { className: 'stat' }, h('div', { className: 'eyebrow' }, 'Scoring'), h('div', { className: 'v' }, '×' + G.sizeFactor(myGuild.members.length).toFixed(2)), h('div', { className: 'tiny muted' }, 'size-fair vs ×' + G.sizeFactor(enemy.members.length).toFixed(2)))),
-        h(Section, { title: 'Recent attacks' }, h('div', { className: 'card', style: { padding: '4px 14px' } }, h(FeedList, { s, now, items: feed.slice(0, 5), fresh })))),
-      tab === 'feed' && h('div', { className: 'card', style: { padding: '4px 14px' } }, h(FeedList, { s, now, items: feed, fresh })),
-      tab === 'duel' && h(DuelCard, { s, now, toggleDuel }));
+    const embers = useMemo(() => Array.from({ length: 18 }, () => ({ l: Math.random() * 100, b: Math.random() * 40, dur: 3 + Math.random() * 4, del: Math.random() * 5 })), []);
+    const Side = ({ tone, g, hp }) => h('div', { className: 'side' },
+      h(Banner, { tone, crest: g.crest, w: 140 }),
+      h('div', { className: 'n', style: { fontSize: 16, marginTop: -30, textShadow: '0 2px 6px #000', position: 'relative' } }, g.name),
+      h('div', { className: 'hp', style: { fontSize: 19 } }, fmt(hp), h('small', null, 'HP')));
+    return h('div', null,
+      h(Topbar, { title: 'Battle', left: h('button', { className: 'icon-btn', onClick: back, 'aria-label': 'Back' }, h(Icon, { n: 'chevL' })),
+        right: h('button', { className: 'btn outline-gold', onClick: openRules }, 'Rules') }),
+      h('div', { className: 'arena' },
+        embers.map((e, i) => h('span', { key: i, className: 'ember', style: { left: e.l + '%', bottom: e.b + '%', animationDuration: e.dur + 's', animationDelay: e.del + 's' } })),
+        h('div', { style: { textAlign: 'center', position: 'relative' } },
+          h('div', { className: 'h1', style: { fontSize: 26 } }, 'Weekly Battle'),
+          h('div', { style: { color: '#E6E9F2', marginTop: 2 } }, fmtLeft(d.battleLeft) + ' left')),
+        h('div', { className: 'row', style: { justifyContent: 'center', gap: 0, marginTop: 6, position: 'relative' } },
+          h(Side, { tone: 'blue', g: s.myGuild, hp: d.usHP }),
+          h('div', { className: 'battle-card', style: { background: 'none', border: 0, padding: 0, alignSelf: 'center', marginTop: -60, overflow: 'visible' } }, h('div', { className: 'vs', style: { fontSize: 44 } }, 'VS')),
+          h(Side, { tone: 'red', g: d.enemy, hp: d.enemyHP })),
+        h('div', { style: { padding: '14px 16px 0', position: 'relative' } },
+          h(VsBar, { us: d.usHP, them: d.enemyHP, thick: true }),
+          h('div', { className: 'row tiny', style: { marginTop: 8, color: '#C9D0DC' } },
+            h('span', null, '🛡️ Shield ' + Math.round(d.myShield * 100) + '%'),
+            h('span', { className: 'grow', style: { textAlign: 'center', color: 'var(--gold)' } }, d.pendingOnEnemy > 0 ? '⏳ ' + d.pendingOnEnemy + ' pending' : ''),
+            h('span', null, 'Shield ' + Math.round(d.enemyShield * 100) + '% 🛡️')))),
+      h('div', { className: 'page' },
+        d.notAttacked > 0 && h('div', { className: 'card tiny', style: { borderColor: 'rgba(229,56,59,0.4)', color: '#FFC2C2' } },
+          h('b', null, d.notAttacked + ' teammates haven\'t attacked yet.'), ' Every attacker raises the shield, so the Dragons hit softer.'),
+        h(SectionHead, { title: 'Recent Activity' }),
+        h(ActivityList, { s, now, items: feed.slice(0, 12), fresh })));
   };
 
-  const DuelCard = ({ s, toggleDuel }) => {
-    const rival = { name: 'Kamila N.', bg: '#F5E642', lvl: 7, dmg: 49 };
-    const mine = s.feed.filter((f) => f.side === 'us' && f.who === s.me.name && !f.pending).reduce((a, f) => a + f.dmg, 0);
-    if (!s.me.duel) {
-      return h('div', { className: 'card', style: { textAlign: 'center' } },
-        h(Clay, { icon: '🤺', color: '#8B5CF6', size: 'lg', style: { margin: '6px auto 12px' } }),
-        h('div', { className: 'h2' }, '1v1 Duel · opt-in'),
-        h('p', { className: 'muted', style: { margin: '6px 0 14px' } }, 'Get matched with a student of similar level from another guild. Whoever lands more homework damage this week wins 40 coins. Losing costs nothing.'),
-        h('button', { className: 'btn primary block', onClick: toggleDuel }, 'Join this week\'s duel'));
-    }
-    return h('div', { className: 'card glow-purple' },
-      h('div', { className: 'eyebrow', style: { textAlign: 'center' } }, 'Duel · ends with the battle'),
-      h('div', { className: 'row', style: { justifyContent: 'space-around', margin: '14px 0' } },
-        h('div', { style: { textAlign: 'center' } }, h(MyAvatar, { s, size: 56 }), h('div', { style: { fontWeight: 700, marginTop: 6 } }, 'You'), h('div', { className: 'num', style: { fontSize: 26, color: 'var(--lime)' } }, mine)),
-        h('div', { className: 'vs' }, 'VS'),
-        h('div', { style: { textAlign: 'center' } }, h(PersonAv, { p: rival, size: 64 }), h('div', { style: { fontWeight: 700, marginTop: 6 } }, rival.name), h('div', { className: 'num', style: { fontSize: 26, color: 'var(--orange)' } }, rival.dmg))),
-      h('div', { className: 'tiny muted', style: { textAlign: 'center' } }, 'Level ' + G.levelFromXp(s.me.xp) + ' vs level ' + rival.lvl + ' · only verified damage counts'),
-      h('button', { className: 'btn ghost block sm', style: { marginTop: 12 }, onClick: toggleDuel }, 'Leave duel'));
-  };
-
-  // ---------------------------------------------------------------- raid
-  const RaidScreen = ({ s, d, now, go }) => {
+  // ---------------------------------------------------------------- Guild
+  const GuildScreen = ({ s, d, now, openBattle, toggleDuel }) => {
+    const [tab, setTab] = useState('overview');
+    const ranked = s.myGuild.members.slice().sort((a, b) => b.week - a.week);
+    // Students only see teammates who have attacked: there is no public bottom of the list.
+    const active = ranked.filter((m) => m.week > 0);
+    const myFace = (s.shop.find((x) => x.id === s.me.avatar) || {}).icon;
+    const MemberRow = ({ m, i }) => h('div', { className: cx('item', m.me && 'hl') },
+      h('div', { style: { width: 22, textAlign: 'center', fontWeight: 700, color: m.me ? 'var(--gold)' : 'var(--text-2)' } }, i === 0 ? '👑' : i + 1),
+      h(Face, { face: m.me ? myFace : m.face, size: 34 }),
+      h('div', { className: 'grow t' }, m.name + (m.me ? ' (you)' : '')),
+      h('div', { className: 'num', style: { color: 'var(--gold)' } }, fmt(m.week)));
     const b = d.liveBoss;
-    const members = s.myGuild.members;
-    if (!b) return h('div', { className: 'page' }, h('h1', { className: 'h1' }, 'All bosses defeated 🏆'));
-    const left = Math.max(0, b.hp - b.dealt);
-    const contrib = b.contrib || {};
-    const struck = Object.keys(contrib).filter((k) => contrib[k] > 0).length;
-    const top = Object.entries(contrib).sort((a, c) => c[1] - a[1]).slice(0, 3);
-    const mine = contrib[s.me.id] || 0;
-    const r = s.regions.find((x) => x.unit === b.unit);
-    return h('div', { className: 'page' },
-      h('div', null, h('div', { className: 'eyebrow' }, 'Boss Raid · Unit ' + b.unit + ' · ' + r.name), h('h1', { className: 'h1' }, 'Raid')),
-      h('div', { className: 'card glow-purple', style: { textAlign: 'center', padding: 20, background: 'radial-gradient(80% 60% at 50% 0%, rgba(139,92,246,0.25), transparent 70%), var(--surface)' } },
-        h(Clay, { icon: b.icon, color: '#8B5CF6', size: 'lg', round: true, style: { margin: '6px auto 12px', width: 104, height: 104, fontSize: 56 } }),
-        h('div', { className: 'h1', style: { fontSize: 22 } }, b.name),
-        h('div', { className: 'tiny muted', style: { marginTop: 4 } }, 'Defeat it before ' + new Date(b.deadline).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) + ' · ' + fmtCountdown(b.deadline - now) + ' left'),
-        h('div', { style: { marginTop: 16 } }, h(HP, { value: left, max: b.hp, color: 'linear-gradient(90deg, #8B5CF6, #EC4899)', size: 'big' })),
-        h('div', { className: 'row', style: { marginTop: 8 } },
-          h('span', { className: 'num', style: { fontSize: 20 } }, left),
-          h('span', { className: 'tiny muted grow', style: { textAlign: 'left' } }, ' / ' + b.hp + ' HP'),
-          h('span', { className: 'tiny muted' }, struck + ' of ' + members.length + ' have struck'))),
-      h('div', { className: 'grid2' },
-        h('div', { className: 'stat' }, h('div', { className: 'eyebrow' }, 'Your hits'), h('div', { className: 'v', style: { color: 'var(--lime)' } }, mine), h('div', { className: 'tiny muted' }, pct(mine, b.hp) + '% of its HP')),
-        h('div', { className: 'stat' }, h('div', { className: 'eyebrow' }, 'Unlocks'), h('div', { className: 'v', style: { fontSize: 18, marginTop: 6 } }, '🏛️ Unit ' + (b.unit + 1)), h('div', { className: 'tiny muted' }, 'when it falls'))),
-      h(Section, { title: 'Raid MVPs' },
-        h('div', { className: 'card', style: { padding: '6px 14px' } },
-          top.map(([id, dmg], i) => {
-            const m = members.find((x) => x.id === id);
-            return h('div', { key: id, className: 'feed-item', style: { alignItems: 'center' } },
-              h('div', { className: 'num', style: { width: 18, color: ['var(--gold)', '#C9D1DE', '#C98A5A'][i] } }, i + 1),
-              h(PersonAv, { p: m }), h('div', { className: 'grow', style: { fontWeight: 600 } }, m.me ? 'You' : m.name),
-              h('div', { className: 'num', style: { color: 'var(--lime)' } }, dmg));
-          }))),
-      h('div', { className: 'tiny muted' }, 'Every homework in Unit ' + b.unit + ' hits the boss with its full damage. The whole guild wins together — there is no bottom of this list.'),
-      d.nextHw && d.nextHw.unit === b.unit && h('button', { className: 'btn primary block', onClick: () => go('map') }, '⚔️  Strike with ' + d.nextHw.title),
-      h(Section, { title: 'Bosses this term' },
-        s.bosses.slice().sort((a, c) => a.unit - c.unit).map((x) => h('div', { key: x.unit + x.name, className: 'card row', style: { padding: 12, opacity: x.unit > b.unit ? 0.55 : 1 } },
-          h(Clay, { icon: x.unit > b.unit ? '🔒' : x.icon, color: x.defeated ? '#0FA88A' : '#8B5CF6', size: 'sm' }),
-          h('div', { className: 'grow' }, h('div', { style: { fontWeight: 700 } }, x.name), h('div', { className: 'tiny muted' }, 'Unit ' + x.unit)),
-          x.defeated ? h(Badge, { k: 'b-lime' }, 'Defeated') : x === b ? h(Badge, { k: 'b-purple' }, 'Active') : h(Badge, { k: 'b-grey' }, 'Locked')))));
+    return h('div', null,
+      h('div', { style: { padding: '14px 16px 0', background: 'radial-gradient(80% 100% at 20% 0%, rgba(47,128,255,0.35), transparent 70%)' } },
+        h('div', { className: 'row', style: { gap: 14 } },
+          h(Crest, { tone: 'blue', crest: s.myGuild.crest, size: 64 }),
+          h('div', { className: 'grow' }, h('div', { className: 'h1', style: { fontSize: 24 } }, s.myGuild.name),
+            h('div', { className: 'muted' }, s.myGuild.members.length + ' members · ' + s.myGuild.level))),
+        h('div', { className: 'utabs', style: { marginTop: 14 } }, [['overview', 'Overview'], ['members', 'Members'], ['battles', 'Battles']].map(([k, l]) => h('button', { key: k, className: tab === k ? 'on' : '', onClick: () => setTab(k) }, l)))),
+      h('div', { className: 'page' },
+        tab === 'overview' && h(React.Fragment, null,
+          h(BattleCard, { s, d, compact: true, onView: openBattle }),
+          h(SectionHead, { title: 'Guild Members', right: h('button', { style: { color: 'var(--blue-hi)', fontWeight: 600 }, onClick: () => setTab('members') }, 'See all') }),
+          h('div', { className: 'list' }, active.slice(0, 5).map((m, i) => h(MemberRow, { key: m.id, m, i })))),
+        tab === 'members' && h(React.Fragment, null,
+          h('div', { className: 'list' }, active.map((m, i) => h(MemberRow, { key: m.id, m, i }))),
+          d.notAttacked > 0 && h('div', { className: 'card tiny muted', style: { textAlign: 'center' } }, '+' + d.notAttacked + ' teammates yet to attack this week · names stay private')),
+        tab === 'battles' && h(React.Fragment, null,
+          b && h('div', { className: 'card', style: { background: 'radial-gradient(80% 80% at 50% 0%, rgba(139,92,246,0.3), transparent 70%), var(--surface)', borderColor: 'rgba(139,92,246,0.4)' } },
+            h('div', { className: 'row', style: { gap: 14 } },
+              h(Crest, { tone: 'purple', icon: b.icon, size: 62, rim: 'gold' }),
+              h('div', { className: 'grow' },
+                h('div', { className: 'eyebrow', style: { color: '#B9A2FF' } }, 'Boss Raid · Unit ' + b.unit),
+                h('div', { className: 'h2' }, b.name),
+                h('div', { className: 'tiny muted' }, fmtLeft(b.deadline - now) + ' left · unlocks Unit ' + (b.unit + 1)))),
+            h(Bar, { value: b.hp - b.dealt, max: b.hp, color: 'linear-gradient(90deg,#8B5CF6,#EC4899)', style: { height: 12, marginTop: 14 } }),
+            h('div', { className: 'row tiny muted', style: { marginTop: 6 } },
+              h('span', { className: 'grow' }, fmt(b.hp - b.dealt) + ' / ' + fmt(b.hp) + ' HP'),
+              h('span', null, 'Your hits: ', h('b', { style: { color: 'var(--gold)' } }, fmt((b.contrib || {})[s.me.id] || 0))))),
+          h(SectionHead, { title: 'Past battles' }),
+          h('div', { className: 'list' }, s.battle.history.map((x, i) => h('div', { key: i, className: 'item' },
+            h(Badge, { k: x.won ? 'b-green' : 'b-red' }, x.won ? 'WON' : 'LOST'),
+            h('div', { className: 'grow t' }, 'vs ' + x.vs),
+            h('div', { className: 'tiny muted num' }, fmt(x.us) + ' – ' + fmt(x.them))))),
+          h(SectionHead, { title: '1v1 Duel' }),
+          h('div', { className: 'card row' },
+            h('div', { style: { fontSize: 30 } }, '🤺'),
+            h('div', { className: 'grow' }, h('div', { style: { fontWeight: 700 } }, s.me.duel ? 'You vs Kamila (Dragons)' : 'Opt-in weekly duel'),
+              h('div', { className: 'tiny muted' }, s.me.duel ? 'Most approved damage this week wins 40 coins' : 'Matched with a student of similar level. Losing costs nothing.')),
+            h('button', { className: cx('btn sm', s.me.duel ? 'ghost' : 'gold'), onClick: toggleDuel }, s.me.duel ? 'Leave' : 'Join')))));
   };
 
-  // ---------------------------------------------------------------- side quests
+  // ---------------------------------------------------------------- Profile
+  const ACH = [
+    { k: 'hero', name: 'Homework Hero', desc: 'Complete 10 full homeworks', tone: 'gold', icon: '⭐', prog: (me) => [me.fullCount, 10] },
+    { k: 'early', name: 'Early Bird', desc: 'Submit 5 tasks early', tone: 'blue', icon: '🕊️', prog: (me) => [me.earlyCount, 5] },
+    { k: 'speak', name: 'Speaking Pro', desc: 'Upload 5 speaking tasks', tone: 'red', icon: '🎙️', prog: (me) => [me.speakingCount, 5] },
+    { k: 'crit', name: 'Critical Striker', desc: 'Land 3 Critical Hits', tone: 'purple', icon: '💥', prog: (me) => [me.crits || 0, 3] },
+    { k: 'raid', name: 'Raid Breaker', desc: 'Help defeat a unit boss', tone: 'green', icon: '🗿', prog: (me) => [me.titles.includes('Raid Breaker') ? 1 : 0, 1] },
+    { k: 'quest', name: 'Explorer', desc: 'Finish 5 extra quests', tone: 'blue', icon: '🧭', prog: (me) => [me.sideDone.length, 5] },
+  ];
+  const Medal = ({ a, me }) => {
+    const [v, max] = a.prog(me);
+    const got = v >= max;
+    return h('div', { className: 'ach', style: got ? null : { opacity: 0.85 } },
+      h('div', { style: got ? null : { filter: 'grayscale(1) brightness(0.7)' } }, h(Crest, { tone: a.tone, icon: a.icon, size: 52, rim: 'gold', spikes: false })),
+      h('div', { className: 'n' }, a.name), h('div', { className: 'd' }, a.desc),
+      !got && h('div', { className: 'tiny', style: { color: 'var(--gold)', fontWeight: 700 } }, Math.min(v, max) + '/' + max));
+  };
+  const ProfileScreen = ({ s, d, openSettings, openShop, openChest, openAch, setTitle }) => {
+    const { me } = s;
+    const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    const done = (a) => a.prog(me)[0] >= a.prog(me)[1];
+    const shown = ACH.slice().sort((a, b) => done(b) - done(a) || b.prog(me)[0] / b.prog(me)[1] - a.prog(me)[0] / a.prog(me)[1]).slice(0, 3);
+    return h('div', null,
+      h(Topbar, { title: 'Profile', left: h('span', { style: { fontSize: 22 }, title: d.rank.name + ' rank' }, d.rank.icon),
+        right: h('button', { className: 'icon-btn', onClick: openSettings, 'aria-label': 'Settings' }, h(Icon, { n: 'gear' })) }),
+      h('div', { className: 'page', style: { paddingTop: 4 } },
+        h('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 } },
+          h(MeAvatar, { s, size: 92, crown: true }),
+          h('div', { className: 'h1', style: { marginTop: 8 } }, me.name),
+          h('div', { style: { color: '#D2D8E6' } }, s.course.name + ' · ' + s.myGuild.name),
+          h('div', { className: 'tiny', style: { color: 'var(--gold)', fontWeight: 600 } }, '“' + me.title + '”')),
+        h('div', { className: 'tiles' },
+          h('div', { className: 'tile' }, h('div', { className: 'k' }, 'Level'), h('div', { className: 'v' }, h(Icon, { n: 'star', s: 22, fill: 'var(--gold)' }), d.lvl.lvl)),
+          h('div', { className: 'tile' }, h('div', { className: 'k' }, 'Total Damage'), h('div', { className: 'v' }, h('span', { style: { color: 'var(--red-hi)' } }, h(Icon, { n: 'swords', s: 20 })), fmt(me.totalDamage))),
+          h('div', { className: 'tile' }, h('div', { className: 'k' }, 'Coins'), h('div', { className: 'v' }, '🪙', fmt(me.coins)))),
+        h('div', { className: 'card' },
+          h('div', { style: { fontWeight: 700, fontSize: 16 } }, 'Streak'),
+          h('div', { className: 'row', style: { marginTop: 6 } },
+            h('div', { className: 'grow', style: { fontWeight: 800, fontSize: 22, whiteSpace: 'nowrap' } }, '🔥 ' + me.streak + ' days'),
+            h('div', { className: 'week' }, days.map((x, i) => h('div', { key: i, className: 'd' }, h('div', { className: cx('c', me.week[i] && 'on') }, me.week[i] ? h(Icon, { n: 'check', s: 12, w: 3.5 }) : null), x))))),
+        me.chests > 0 && h('button', { className: 'card row', style: { borderColor: 'var(--gold)' }, onClick: openChest },
+          h(Chest, { size: 48 }),
+          h('div', { className: 'grow' }, h('div', { style: { fontWeight: 800, color: 'var(--gold)' } }, me.chests + ' chest' + (me.chests > 1 ? 's' : '') + ' to open'), h('div', { className: 'tiny muted' }, 'Earned for a Full homework')),
+          h(Icon, { n: 'chevR' })),
+        h(SectionHead, { title: 'Achievements', right: h('button', { style: { color: 'var(--blue-hi)', fontWeight: 600 }, onClick: openAch }, 'See all') }),
+        h('div', { className: 'ach-grid' }, shown.map((a) => h(Medal, { key: a.k, a, me }))),
+        h('div', { className: 'card' },
+          h('div', { className: 'row' }, h('div', { className: 'grow' }, h('div', { style: { fontWeight: 700 } }, 'Level ' + d.lvl.lvl + ' → ' + (d.lvl.lvl + 1)), h('div', { className: 'tiny muted' }, d.rank.icon + ' ' + d.rank.name + ' rank this season')),
+            h('span', { className: 'tiny muted num' }, fmt(d.lvl.into) + ' / ' + fmt(d.lvl.need) + ' XP')),
+          h(Bar, { value: d.lvl.into, max: d.lvl.need, color: 'linear-gradient(90deg, var(--gold-lo), var(--gold-hi))', style: { marginTop: 10 } })),
+        h('button', { className: 'btn ghost block', onClick: openShop }, h(Icon, { n: 'shop', s: 18 }), 'Shop & inventory'),
+        h(SectionHead, { title: 'Titles' }),
+        h('div', { className: 'pill-tabs', style: { flexWrap: 'wrap' } },
+          ['Grammar Strategist', 'Early Bird', 'Speaking Specialist', 'Raid Breaker'].map((t) => h('button', { key: t, className: me.title === t ? 'on' : '', disabled: !me.titles.includes(t), style: { opacity: me.titles.includes(t) ? 1 : 0.4 }, onClick: () => setTitle(t) }, (me.titles.includes(t) ? '' : '🔒 ') + t)))));
+  };
+
+  // ---------------------------------------------------------------- sheets
+  const TaskSheet = ({ s, hwId, idx, onClose, setStatus, setAudio }) => {
+    const hw = s.homeworks.find((x) => x.id === hwId);
+    const t = hw.tasks[idx];
+    const st = (s.me.tasks[hwId] || [])[idx] || 'Not started';
+    const audio = (s.me.audio[hwId] || {})[idx];
+    const ro = !!s.me.submitted[hwId];
+    const [rec, setRec] = useState(false);
+    useEffect(() => {
+      if (!rec) return undefined;
+      const tm = setTimeout(() => { setAudio(hwId, idx, '0:' + pad2(35 + Math.floor(Math.random() * 40))); setRec(false); }, 2200);
+      return () => clearTimeout(tm);
+    }, [rec]);
+    return h(Sheet, { onClose },
+      h('div', { className: 'row', style: { marginBottom: 16 } },
+        h('div', { style: { width: 52, height: 52, borderRadius: 14, background: 'var(--surface-2)', display: 'grid', placeItems: 'center', color: 'var(--cream)' } }, h(Icon, { n: TYPE_ICON[t.type], s: 28, w: 1.8 })),
+        h('div', { className: 'grow' }, h('div', { className: 'tiny muted' }, 'Unit ' + hw.unit + ' · Lesson ' + hw.lesson + ' · ' + hw.title), h('div', { className: 'h2' }, t.label),
+          h('div', { className: 'dmg tiny' }, '+' + G.DAMAGE[t.type] + ' damage when Full'))),
+      h('div', { className: 'eyebrow', style: { marginBottom: 8 } }, ro ? 'Submitted' : 'How much did you finish?'),
+      h('div', { className: 'seg', style: ro ? { opacity: 0.55 } : null },
+        G.STATUSES.map((x) => h('button', { key: x, disabled: ro, className: st === x ? SEG_CLS[x] : '', onClick: () => setStatus(hwId, idx, x) }, x))),
+      t.type === 'speaking' && h('div', { className: 'card row', style: { marginTop: 12 } },
+        audio
+          ? h(React.Fragment, null, h('span', { style: { color: 'var(--green)', fontWeight: 700 } }, '🎧 Recording attached · ' + audio), h('span', { className: 'grow' }), !ro && h('button', { className: 'btn ghost sm', onClick: () => setRec(true) }, 'Re-record'))
+          : rec
+            ? h(React.Fragment, null, h('span', { className: 'rec' }), h('b', null, 'Recording…'))
+            : h(React.Fragment, null, h('div', { className: 'grow tiny', style: { color: 'var(--gold)' } }, 'Speaking only counts with real audio'), !ro && h('button', { className: 'btn gold sm', onClick: () => setRec(true) }, h(Icon, { n: 'mic', s: 16 }), 'Record'))),
+      h('button', { className: 'btn gold block', style: { marginTop: 16 }, onClick: onClose }, 'Done'));
+  };
+
+  const RulesSheet = ({ onClose }) => h(Sheet, { onClose },
+    h('div', { className: 'h1', style: { marginBottom: 4 } }, 'Battle rules'),
+    h('div', { className: 'muted', style: { marginBottom: 12 } }, 'Only real, approved homework wins battles.'),
+    h('div', { className: 'list' },
+      [['Grammar / vocabulary / listening / reading', '10'], ['Writing task', '25'], ['Speaking task (audio uploaded)', '30'], ['Full homework bonus', '+20'],
+        ['Early Strike (24h+ before deadline)', '×1.5'], ['Teacher rates 3★ (Critical Hit)', '×2'], ['Teacher rates 1★', '×0.5'], ['Streak of 3+', '+10%'], ['Late submission', '×0.5']]
+        .map(([a, b], i) => h('div', { key: i, className: 'item' }, h('div', { className: 'grow' }, a), h('b', { style: { color: 'var(--gold)' } }, b)))),
+    h('div', { className: 'tiny muted', style: { marginTop: 12, lineHeight: 1.5 } },
+      'Damage is pending until your teacher checks the work. Every teammate who attacks raises the guild shield, so the other side hits softer. Scores are adjusted for group size, so a bigger group can\'t win just by having more students.'),
+    h('button', { className: 'btn gold block', style: { marginTop: 14 }, onClick: onClose }, 'Got it'));
+
+  const InfoSheet = ({ title, body, onClose, icon }) => h(Sheet, { onClose },
+    h('div', { style: { textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' } },
+      icon, h('div', { className: 'h1', style: { margin: '10px 0 6px' } }, title), h('p', { className: 'muted', style: { margin: '0 0 16px', lineHeight: 1.5 } }, body),
+      h('button', { className: 'btn gold block', onClick: onClose }, 'Got it')));
+
+  const NotifSheet = ({ items, onClose }) => h(Sheet, { onClose },
+    h('div', { className: 'h1', style: { marginBottom: 12 } }, 'Notifications'),
+    h('div', { className: 'list' }, items.length ? items.map((n, i) => h('div', { key: i, className: 'item' }, h('span', { style: { fontSize: 22 } }, n.icon), h('div', { className: 'grow', style: { fontSize: 13.5 } }, n.text))) : h('div', { className: 'item muted' }, 'You\'re all caught up')));
+
   const KIND_LABEL = { video: 'Watch a video', article: 'Read an article', shadowing: 'Shadowing', flashcards: 'Flashcards' };
-  const CHECK_LABEL = { video: '3 comprehension questions', article: '1-minute vocabulary check', shadowing: 'Record and upload audio', flashcards: 'Short self-test' };
-
-  const QuestsScreen = ({ s, openQuest }) => {
-    const [lvl, setLvl] = useState('B1');
-    const list = s.sideQuests.filter((q) => lvl === 'All' || q.level === lvl).sort((a, b) => (b.assigned ? 1 : 0) - (a.assigned ? 1 : 0));
-    const cap = G.SIDE_QUEST_DAILY_CAP;
-    return h('div', { className: 'page' },
-      h('div', null, h('div', { className: 'eyebrow' }, 'Side quests'), h('h1', { className: 'h1' }, 'Quests')),
-      h('div', { className: 'card', style: { padding: 14 } },
-        h('div', { className: 'row' },
-          h('div', { className: 'grow' },
-            h('div', { style: { fontWeight: 800 } }, 'Daily rewards · ' + Math.min(s.me.sideToday, cap) + ' / ' + cap),
-            h('div', { className: 'tiny muted' }, 'Earn coins and a little XP. Homework stays your main weapon.')),
-          h('div', { className: 'row', style: { gap: 4 } }, Array.from({ length: cap }, (_, i) => h('div', { key: i, style: { width: 14, height: 14, borderRadius: 5, background: i < s.me.sideToday ? 'var(--gold)' : 'var(--surface-hi)' } }))))),
-      h('div', { className: 'pill-tabs' }, ['B1', 'All', 'A2', 'C1'].map((x) => h('button', { key: x, className: lvl === x ? 'on' : '', onClick: () => setLvl(x) }, x === 'B1' ? 'My level · B1' : x))),
-      list.map((q) => {
-        const done = s.me.sideDone.includes(q.id);
-        return h('button', { key: q.id, className: 'card row', style: { textAlign: 'left', padding: 14, opacity: done ? 0.6 : 1 }, onClick: () => openQuest(q.id) },
-          h(Clay, { icon: q.icon, color: q.color }),
-          h('div', { className: 'grow' },
-            h('div', { className: 'row', style: { gap: 6, marginBottom: 3, flexWrap: 'wrap' } },
-              h('span', { className: 'eyebrow' }, KIND_LABEL[q.kind] + ' · ' + q.mins + ' min'),
-              q.assigned && h(Badge, { k: 'b-lime' }, 'From teacher'),
-              done && h(Badge, { k: 'b-grey' }, '✓ Done')),
-            h('div', { style: { fontWeight: 700, fontSize: 14.5 } }, q.title),
-            h('div', { className: 'tiny muted', style: { marginTop: 2 } }, '✔ ' + CHECK_LABEL[q.kind])),
-          h('div', { style: { textAlign: 'right', flexShrink: 0 } },
-            h('div', { className: 'num', style: { color: 'var(--gold)' } }, '🪙 ' + q.coins),
-            h('div', { className: 'tiny muted' }, '+' + q.xp + ' XP')));
-      }));
-  };
+  const CHECK_LABEL = { video: '3 quick questions', article: '1-minute vocabulary check', shadowing: 'Record and upload audio', flashcards: 'Short self-test' };
+  const QuestLibrary = ({ s, onClose, openQuest }) => h(Sheet, { onClose },
+    h('div', { className: 'row', style: { marginBottom: 4 } }, h('div', { className: 'h1 grow' }, 'Extra quests'), h(Badge, { k: 'b-gold' }, Math.min(s.me.sideToday, G.SIDE_QUEST_DAILY_CAP) + '/' + G.SIDE_QUEST_DAILY_CAP + ' today')),
+    h('div', { className: 'muted', style: { marginBottom: 12 } }, 'Optional practice for coins. Homework stays your main weapon.'),
+    h('div', { className: 'list' }, s.sideQuests.map((q) => {
+      const done = s.me.sideDone.includes(q.id);
+      return h('button', { key: q.id, className: 'item', style: { opacity: done ? 0.5 : 1 }, onClick: () => openQuest(q.id) },
+        h('div', { style: { width: 42, height: 42, borderRadius: 12, background: q.color + '33', display: 'grid', placeItems: 'center', fontSize: 22, flexShrink: 0 } }, q.icon),
+        h('div', { className: 'grow' }, h('div', { className: 't' }, q.title), h('div', { className: 's' }, KIND_LABEL[q.kind] + ' · ' + CHECK_LABEL[q.kind])),
+        q.assigned && !done && h(Badge, { k: 'b-blue' }, 'Teacher'),
+        done ? h(Badge, { k: 'b-green' }, '✓') : h('span', { style: { color: 'var(--gold)', fontWeight: 700, whiteSpace: 'nowrap' } }, '+' + q.coins + ' 🪙'));
+    })));
 
   const Quiz = ({ questions, onDone, timed }) => {
     const [ans, setAns] = useState({});
@@ -468,17 +530,15 @@
     }, [left, checked, timed]);
     const score = questions.filter((q, i) => ans[i] === q.a).length;
     return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 14 } },
-      timed && !checked && h('div', { className: 'row' }, h('span', { className: 'eyebrow grow' }, 'Vocabulary check'), h('span', { className: 'num', style: { color: left < 15 ? 'var(--red)' : 'var(--gold)' } }, '⏱ 0:' + pad2(left))),
+      timed && !checked && h('div', { className: 'row' }, h('span', { className: 'eyebrow grow' }, 'Vocabulary check'), h('span', { className: 'num', style: { color: left < 15 ? 'var(--red-hi)' : 'var(--gold)' } }, '⏱ 0:' + pad2(left))),
       questions.map((q, i) => h('div', { key: i, style: { display: 'flex', flexDirection: 'column', gap: 6 } },
         h('div', { style: { fontWeight: 700 } }, (i + 1) + '. ' + q.q),
         q.opts.map((o, j) => h('button', { key: j, disabled: checked, className: cx('quiz-opt', !checked && ans[i] === j && 'sel', checked && j === q.a && 'right', checked && ans[i] === j && j !== q.a && 'wrong'), onClick: () => setAns((a) => ({ ...a, [i]: j })) }, o)))),
       !checked
-        ? h('button', { className: 'btn primary block', disabled: Object.keys(ans).length < questions.length && !(timed && left <= 0), onClick: () => setChecked(true) }, 'Check answers')
-        : h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
-          h('div', { className: 'card', style: { padding: 12, textAlign: 'center', background: score >= 2 ? 'var(--lime-soft)' : 'var(--red-soft)', borderColor: 'transparent', fontWeight: 700 } },
-            score + ' / ' + questions.length + ' correct · ' + (score >= 2 ? 'quest passed!' : 'you need 2 to pass')),
-          score >= 2
-            ? h('button', { className: 'btn gold block', onClick: () => onDone(true) }, 'Claim reward')
+        ? h('button', { className: 'btn gold block', disabled: Object.keys(ans).length < questions.length, onClick: () => setChecked(true) }, 'Check answers')
+        : h(React.Fragment, null,
+          h('div', { className: 'card', style: { textAlign: 'center', fontWeight: 700, borderColor: score >= 2 ? 'var(--green)' : 'var(--red)' } }, score + ' / ' + questions.length + ' correct · ' + (score >= 2 ? 'quest passed!' : 'you need 2 to pass')),
+          score >= 2 ? h('button', { className: 'btn gold block', onClick: onDone }, 'Claim reward')
             : h('button', { className: 'btn ghost block', onClick: () => { setAns({}); setChecked(false); setLeft(timed || 0); } }, 'Try again')));
   };
 
@@ -503,228 +563,143 @@
       return () => clearTimeout(t);
     }, [rec]);
     const finish = () => { complete(q); onClose(); };
-
     let body;
-    if (done) body = h('div', { className: 'card', style: { textAlign: 'center', background: 'var(--lime-soft)', borderColor: 'transparent', fontWeight: 700, color: 'var(--lime)' } }, '✓ You finished this quest');
+    if (done) body = h('div', { className: 'card', style: { textAlign: 'center', color: 'var(--green)', fontWeight: 700 } }, '✓ You finished this quest');
     else if (q.kind === 'video') {
-      body = stage === 'check'
-        ? h(Quiz, { questions: q.check, onDone: finish })
+      body = stage === 'check' ? h(Quiz, { questions: q.check, onDone: finish })
         : h('div', null,
-          h('div', { style: { aspectRatio: '16/9', borderRadius: 16, background: 'linear-gradient(135deg, #3b1d4a, #12233f)', display: 'grid', placeItems: 'center', position: 'relative', overflow: 'hidden', marginBottom: 12 } },
-            stage === 'intro'
-              ? h('button', { onClick: () => setStage('watch'), style: { width: 64, height: 64, borderRadius: '50%', background: 'rgba(255,255,255,0.92)', color: '#111', fontSize: 26 }, 'aria-label': 'Play' }, '▶')
-              : h('div', { className: 'tiny', style: { fontWeight: 700 } }, 'Playing…'),
+          h('div', { style: { aspectRatio: '16/9', borderRadius: 14, background: 'linear-gradient(135deg, #3b1d4a, #12233f)', display: 'grid', placeItems: 'center', position: 'relative', overflow: 'hidden', marginBottom: 12 } },
+            stage === 'intro' ? h('button', { onClick: () => setStage('watch'), style: { width: 64, height: 64, borderRadius: '50%', background: 'rgba(255,255,255,0.92)', color: '#111', fontSize: 26, textAlign: 'center' }, 'aria-label': 'Play' }, '▶') : h('b', { className: 'tiny' }, 'Playing…'),
             h('div', { style: { position: 'absolute', left: 0, bottom: 0, height: 4, width: watch + '%', background: 'var(--red)' } })),
           h('p', { className: 'muted', style: { margin: 0 } }, q.body),
           h('div', { className: 'tiny muted', style: { marginTop: 8 } }, 'The questions unlock after the video ends.'));
     } else if (q.kind === 'article') {
-      body = stage === 'check'
-        ? h(Quiz, { questions: q.check, onDone: finish, timed: q.timed })
-        : h('div', null,
-          h('p', { style: { lineHeight: 1.7, fontSize: 15, margin: '0 0 14px' } }, q.body),
-          h('button', { className: 'btn primary block', onClick: () => setStage('check') }, 'Start 1-minute check'));
+      body = stage === 'check' ? h(Quiz, { questions: q.check, onDone: finish, timed: q.timed })
+        : h('div', null, h('p', { style: { lineHeight: 1.7, fontSize: 15, margin: '0 0 14px' } }, q.body), h('button', { className: 'btn gold block', onClick: () => setStage('check') }, 'Start 1-minute check'));
     } else if (q.kind === 'shadowing') {
       body = h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
         h('p', { className: 'muted', style: { margin: 0 } }, q.body),
-        q.lines.map((l, i) => h('div', { key: i, className: 'task row', style: { flexDirection: 'row' } }, h('span', { className: 'num muted' }, i + 1), h('span', { className: 'grow' }, l), h('span', null, '🔊'))),
+        h('div', { className: 'list' }, q.lines.map((l, i) => h('div', { key: i, className: 'item' }, h('span', { className: 'muted num' }, i + 1), h('span', { className: 'grow' }, l), h('span', null, '🔊')))),
         rec === 'done'
-          ? h(React.Fragment, null,
-            h('div', { className: 'tiny', style: { color: 'var(--lime)', fontWeight: 700 } }, '🎧 Recording uploaded · 0:' + pad2(30 + q.lines.length * 3)),
-            h('button', { className: 'btn gold block', onClick: finish }, 'Claim reward'))
-          : h('button', { className: 'btn primary block', disabled: rec === 'rec', onClick: () => setRec('rec') }, rec === 'rec' ? h(React.Fragment, null, h('span', { className: 'rec' }), ' Recording…') : '🎙 Record all 5 lines'));
+          ? h(React.Fragment, null, h('div', { className: 'tiny', style: { color: 'var(--green)', fontWeight: 700 } }, '🎧 Recording uploaded'), h('button', { className: 'btn gold block', onClick: finish }, 'Claim reward'))
+          : h('button', { className: 'btn gold block', disabled: rec === 'rec', onClick: () => setRec('rec') }, rec === 'rec' ? h(React.Fragment, null, h('span', { className: 'rec' }), ' Recording…') : '🎙 Record all 5 lines'));
     } else {
       const c = q.cards[card];
       body = stage === 'intro'
-        ? h('div', { className: 'flash', style: { display: 'flex', flexDirection: 'column', gap: 10 } },
+        ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
           h('div', { className: cx('flash-card', flip && 'back'), onClick: () => setFlip((f) => !f) }, flip ? c[1] : c[0]),
           h('div', { className: 'row' },
             h('button', { className: 'btn ghost sm', disabled: card === 0, onClick: () => { setCard(card - 1); setFlip(false); } }, '←'),
             h('span', { className: 'grow tiny muted', style: { textAlign: 'center' } }, 'Card ' + (card + 1) + ' / ' + q.cards.length + ' · tap to flip'),
-            card < q.cards.length - 1
-              ? h('button', { className: 'btn ghost sm', onClick: () => { setCard(card + 1); setFlip(false); } }, '→')
-              : h('button', { className: 'btn primary sm', onClick: () => { setStage('test'); setCard(0); setFlip(false); } }, 'Self-test')))
+            card < q.cards.length - 1 ? h('button', { className: 'btn ghost sm', onClick: () => { setCard(card + 1); setFlip(false); } }, '→')
+              : h('button', { className: 'btn gold sm', onClick: () => { setStage('test'); setCard(0); setFlip(false); } }, 'Self-test')))
         : stage === 'test'
           ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
             h('div', { className: 'eyebrow' }, 'Self-test · ' + (card + 1) + ' / ' + q.cards.length),
             h('div', { className: cx('flash-card', flip && 'back'), onClick: () => setFlip(true) }, flip ? c[1] : c[0]),
-            !flip
-              ? h('button', { className: 'btn ghost block', onClick: () => setFlip(true) }, 'Say the meaning, then reveal')
-              : h('div', { className: 'grid2' },
-                ['Missed it', 'Knew it'].map((lbl, k) => h('button', { key: lbl, className: cx('btn', k ? 'primary' : 'ghost'), onClick: () => {
-                  const nk = [...known, !!k];
-                  setKnown(nk); setFlip(false);
-                  if (card < q.cards.length - 1) setCard(card + 1); else setStage('result');
-                } }, lbl))))
+            !flip ? h('button', { className: 'btn ghost block', onClick: () => setFlip(true) }, 'Say the meaning, then reveal')
+              : h('div', { className: 'row' }, ['Missed it', 'Knew it'].map((lbl, k) => h('button', { key: lbl, className: cx('btn grow', k ? 'gold' : 'ghost'), onClick: () => {
+                setKnown([...known, !!k]); setFlip(false);
+                if (card < q.cards.length - 1) setCard(card + 1); else setStage('result');
+              } }, lbl))))
           : h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
             h('div', { className: 'card', style: { textAlign: 'center', fontWeight: 700 } }, known.filter(Boolean).length + ' / ' + q.cards.length + ' known'),
             h('button', { className: 'btn gold block', onClick: finish }, 'Claim reward'));
     }
-
     return h(Sheet, { onClose },
       h('div', { className: 'row', style: { marginBottom: 14 } },
-        h(Clay, { icon: q.icon, color: q.color }),
-        h('div', { className: 'grow' },
-          h('div', { className: 'eyebrow' }, KIND_LABEL[q.kind] + ' · ' + q.level),
-          h('div', { className: 'h1', style: { fontSize: 20 } }, q.title)),
-        h('div', { className: 'num', style: { color: 'var(--gold)' } }, '🪙 ' + q.coins)),
-      s.me.sideToday >= G.SIDE_QUEST_DAILY_CAP && !done && h('div', { className: 'tiny', style: { marginBottom: 10, padding: '8px 10px', borderRadius: 10, background: 'var(--surface-2)', color: 'var(--text-2)' } }, 'Daily reward cap reached — practice still counts, but no coins until tomorrow.'),
+        h('div', { style: { width: 48, height: 48, borderRadius: 14, background: q.color + '33', display: 'grid', placeItems: 'center', fontSize: 24, flexShrink: 0 } }, q.icon),
+        h('div', { className: 'grow' }, h('div', { className: 'tiny muted' }, KIND_LABEL[q.kind] + ' · ' + q.mins + ' min'), h('div', { className: 'h2' }, q.title)),
+        h('span', { style: { color: 'var(--gold)', fontWeight: 800, whiteSpace: 'nowrap' } }, '+' + q.coins + ' 🪙')),
+      s.me.sideToday >= G.SIDE_QUEST_DAILY_CAP && !done && h('div', { className: 'card tiny muted', style: { marginBottom: 10 } }, 'Daily reward cap reached — practice still counts, but no coins until tomorrow.'),
       body);
   };
 
-  // ---------------------------------------------------------------- profile + shop
   const ShopSheet = ({ s, onClose, buy, equip }) => {
     const [tab, setTab] = useState('avatar');
     const items = s.shop.filter((x) => x.kind === tab);
     return h(Sheet, { onClose },
-      h('div', { className: 'row', style: { marginBottom: 12 } },
-        h('div', { className: 'grow' }, h('div', { className: 'eyebrow' }, 'Coins buy looks and protection — never damage'), h('div', { className: 'h1' }, 'Shop')),
-        h('span', { className: 'chip coins' }, '🪙 ' + s.me.coins)),
-      h('div', { className: 'pill-tabs', style: { marginBottom: 12 } },
-        [['avatar', 'Avatars'], ['frame', 'Frames'], ['consumable', 'Items']].map(([k, l]) => h('button', { key: k, className: tab === k ? 'on' : '', onClick: () => setTab(k) }, l))),
-      h('div', { className: tab === 'consumable' ? '' : 'grid2', style: tab === 'consumable' ? { display: 'flex', flexDirection: 'column', gap: 10 } : {} },
-        items.map((it) => {
-          const owned = s.me.owned.includes(it.id);
-          const equipped = s.me.avatar === it.id || s.me.frame === it.id;
+      h('div', { className: 'row', style: { marginBottom: 4 } }, h('div', { className: 'h1 grow' }, 'Shop'), h('span', { className: 'badge b-gold', style: { fontSize: 14, padding: '6px 12px' } }, '🪙 ' + fmt(s.me.coins))),
+      h('div', { className: 'muted', style: { marginBottom: 12 } }, 'Coins buy looks and protection — never damage.'),
+      h('div', { className: 'pill-tabs', style: { marginBottom: 12 } }, [['avatar', 'Avatars'], ['frame', 'Frames'], ['consumable', 'Items']].map(([k, l]) => h('button', { key: k, className: tab === k ? 'on' : '', onClick: () => setTab(k) }, l))),
+      tab === 'consumable'
+        ? h('div', { className: 'list' }, items.map((it) => {
           const used = it.id === 'charm' && s.me.charmUsed;
-          const canBuy = s.me.coins >= it.price && !used;
-          const action = it.kind === 'consumable'
-            ? h('button', { className: 'btn gold sm', disabled: !canBuy, onClick: () => buy(it) }, used ? 'Active' : '🪙 ' + it.price)
-            : owned
-              ? h('button', { className: cx('btn sm', equipped ? 'primary' : 'ghost'), disabled: equipped, onClick: () => equip(it) }, equipped ? 'Equipped' : 'Equip')
-              : h('button', { className: 'btn gold sm', disabled: !canBuy, onClick: () => buy(it) }, '🪙 ' + it.price);
-          if (it.kind === 'consumable') {
-            return h('div', { key: it.id, className: 'card row', style: { padding: 12 } },
-              h(Clay, { icon: it.icon, color: it.id === 'freeze' ? '#3B82F6' : '#0FA88A', size: 'sm' }),
-              h('div', { className: 'grow' }, h('div', { style: { fontWeight: 700 } }, it.name + (it.id === 'freeze' && s.me.freezes ? ' · ' + s.me.freezes + ' owned' : '')), h('div', { className: 'tiny muted' }, it.desc)),
-              action);
-          }
-          return h('div', { key: it.id, className: 'card', style: { padding: 12, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 } },
-            it.kind === 'avatar'
-              ? h('div', { style: { width: 64, height: 64, borderRadius: '50%', background: 'radial-gradient(circle at 30% 25%, #2d3446, #151821)', display: 'grid', placeItems: 'center', fontSize: 34 } }, it.icon)
-              : h('div', { className: 'frame-ring', style: { background: it.css, width: 64, height: 64 } }, h('div', { style: { width: 56, height: 56, borderRadius: '50%', background: 'var(--surface-2)' } })),
-            h('div', { style: { fontWeight: 700, fontSize: 13 } }, it.name),
-            action);
+          return h('div', { key: it.id, className: 'item' }, h('span', { style: { fontSize: 28 } }, it.icon),
+            h('div', { className: 'grow' }, h('div', { className: 't' }, it.name + (it.id === 'freeze' && s.me.freezes ? ' · ' + s.me.freezes + ' owned' : '')), h('div', { className: 's' }, it.desc)),
+            h('button', { className: 'btn gold sm', disabled: used || s.me.coins < it.price, onClick: () => buy(it) }, used ? 'Active' : '🪙 ' + it.price));
+        }))
+        : h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 } }, items.map((it) => {
+          const owned = s.me.owned.includes(it.id);
+          const eq = s.me.avatar === it.id || s.me.frame === it.id;
+          return h('div', { key: it.id, className: 'card', style: { padding: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 } },
+            it.kind === 'avatar' ? h(Face, { face: it.icon, size: 56 })
+              : h('div', { className: 'av-ring', style: { background: it.css } }, h('div', { style: { width: 50, height: 50, borderRadius: '50%', background: 'var(--surface-2)' } })),
+            h('div', { style: { fontWeight: 600, fontSize: 12.5, textAlign: 'center' } }, it.name),
+            owned ? h('button', { className: cx('btn sm', eq ? 'blue' : 'ghost'), disabled: eq, style: { width: '100%' }, onClick: () => equip(it) }, eq ? 'Equipped' : 'Equip')
+              : h('button', { className: 'btn gold sm', style: { width: '100%' }, disabled: s.me.coins < it.price, onClick: () => buy(it) }, '🪙 ' + it.price));
         })));
   };
 
-  const ProfileScreen = ({ s, d, minimal, setMinimal, openShop, openChest, setTitle, reset }) => {
-    const { me } = s;
-    const dealt = s.feed.filter((f) => f.side === 'us' && f.who === me.name && !f.pending);
-    const crits = dealt.filter((f) => f.crit).length;
-    const ALL_TITLES = [
-      { t: 'Grammar Strategist', how: 'Grammar tasks at Full five times' },
-      { t: 'Speaking Specialist', how: '3 speaking tasks verified with audio' },
-      { t: 'Early Bird', how: '3 Early Strikes' },
-      { t: 'Raid Breaker', how: 'Land the final blow on a boss' },
-    ];
-    return h('div', { className: 'page' },
-      h('div', { className: 'card', style: { textAlign: 'center', padding: 20, background: 'radial-gradient(80% 60% at 50% 0%, rgba(168,230,61,0.14), transparent 70%), var(--surface)' } },
-        h('div', { style: { display: 'flex', justifyContent: 'center' } }, h(MyAvatar, { s, size: 88 })),
-        h('div', { className: 'h1', style: { marginTop: 10 } }, me.name),
-        h('div', { style: { color: 'var(--lime)', fontWeight: 700, marginTop: 2 } }, '“' + me.title + '”'),
-        h('div', { className: 'row', style: { justifyContent: 'center', gap: 6, marginTop: 10, flexWrap: 'wrap' } },
-          h(Badge, { k: 'b-lime' }, 'Level ' + d.lvl.lvl),
-          h('span', { className: 'badge', style: { background: 'rgba(255,255,255,0.06)', color: d.rank.color } }, d.rank.icon + ' ' + d.rank.name),
-          h(Badge, { k: 'b-grey' }, s.myGuild.emblem + ' ' + s.myGuild.name)),
-        h('div', { style: { marginTop: 14, textAlign: 'left' } },
-          h('div', { className: 'row tiny muted', style: { marginBottom: 6 } }, h('span', { className: 'grow' }, 'XP to level ' + (d.lvl.lvl + 1)), h('span', { className: 'num' }, d.lvl.into + ' / ' + d.lvl.need)),
-          h(HP, { value: d.lvl.into, max: d.lvl.need, color: 'var(--lime)', size: 'thin' }))),
-      h('div', { className: 'grid2' },
-        h('div', { className: 'stat' }, h('div', { className: 'eyebrow' }, 'Season rank'), h('div', { className: 'v', style: { color: d.rank.color } }, d.rank.icon + ' ' + d.rank.name),
-          h('div', { className: 'tiny muted' }, d.rank.next ? (d.rank.next.min - me.seasonPts) + ' pts to ' + d.rank.next.name : 'Top rank')),
-        h('div', { className: 'stat' }, h('div', { className: 'eyebrow' }, 'Streak'), h('div', { className: 'v', style: { color: 'var(--orange)' } }, '🔥 ' + me.streak), h('div', { className: 'tiny muted' }, me.streak >= G.STREAK_MIN ? '+10% damage active' : (G.STREAK_MIN - me.streak) + ' more for +10% damage')),
-        h('div', { className: 'stat' }, h('div', { className: 'eyebrow' }, 'Damage dealt'), h('div', { className: 'v' }, dealt.reduce((a, f) => a + f.dmg, 0)), h('div', { className: 'tiny muted' }, crits + ' critical hits')),
-        h('div', { className: 'stat' }, h('div', { className: 'eyebrow' }, 'Coins'), h('div', { className: 'v', style: { color: 'var(--gold)' } }, '🪙 ' + me.coins), h('div', { className: 'tiny muted' }, me.freezes + ' streak freezes'))),
-      me.chests > 0 && h('button', { className: 'card row glow-lime', style: { textAlign: 'left', padding: 14 }, onClick: openChest },
-        h(Clay, { icon: '🎁', color: '#EAB308' }),
-        h('div', { className: 'grow' }, h('div', { style: { fontWeight: 800 } }, me.chests + ' chest' + (me.chests > 1 ? 's' : '') + ' to open'), h('div', { className: 'tiny muted' }, 'Earned for a Full homework'))),
-      h('button', { className: 'btn ghost block', onClick: openShop }, '🛍️  Shop & inventory'),
-      h(Section, { title: 'This week in ' + s.myGuild.name },
-        h('div', { className: 'grid2' },
-          h('div', { className: 'stat' }, h('div', { className: 'eyebrow', style: { color: 'var(--gold)' } }, '👑 MVP of the week'), h('div', { style: { fontWeight: 800, marginTop: 6 } }, 'Dilnoza K.'), h('div', { className: 'tiny muted' }, 'Most damage landed')),
-          h('div', { className: 'stat' }, h('div', { className: 'eyebrow', style: { color: 'var(--teal)' } }, '📈 Most improved'), h('div', { style: { fontWeight: 800, marginTop: 6 } }, 'Javohir T.'), h('div', { className: 'tiny muted' }, '+60% vs last week')))),
-      h(Section, { title: 'Titles' },
-        ALL_TITLES.map((x) => {
-          const have = me.titles.includes(x.t);
-          return h('button', { key: x.t, className: 'card row', disabled: !have, style: { padding: 12, textAlign: 'left', opacity: have ? 1 : 0.5 }, onClick: () => setTitle(x.t) },
-            h('span', { style: { fontSize: 20 } }, have ? '🏷️' : '🔒'),
-            h('div', { className: 'grow' }, h('div', { style: { fontWeight: 700 } }, x.t), h('div', { className: 'tiny muted' }, x.how)),
-            me.title === x.t && h(Badge, { k: 'b-lime' }, 'Shown'));
-        })),
-      h(Section, { title: 'Settings' },
-        h('div', { className: 'card row', style: { padding: 14 } },
-          h('div', { className: 'grow' }, h('div', { style: { fontWeight: 700 } }, 'Minimal mode'), h('div', { className: 'tiny muted' }, 'Progress and stats with less game decoration')),
-          h('button', { role: 'switch', 'aria-checked': minimal, onClick: () => setMinimal(!minimal), style: { width: 48, height: 28, borderRadius: 999, background: minimal ? 'var(--lime)' : 'var(--surface-hi)', position: 'relative', transition: 'background .15s' } },
-            h('span', { style: { position: 'absolute', top: 3, left: minimal ? 23 : 3, width: 22, height: 22, borderRadius: '50%', background: '#fff', transition: 'left .15s' } }))),
-        h('button', { className: 'btn ghost block sm', onClick: reset }, 'Reset demo')));
-  };
-
-  const ChestSheet = ({ reward, onClose }) => h(Sheet, { onClose },
-    h('div', { style: { textAlign: 'center', padding: '10px 0' } },
-      h(Clay, { icon: reward.icon, color: '#EAB308', size: 'lg', style: { margin: '0 auto 14px', width: 110, height: 110, fontSize: 58 } }),
-      h('div', { className: 'eyebrow' }, 'Chest opened'),
-      h('div', { className: 'h1', style: { margin: '6px 0 16px' } }, reward.label),
-      h('button', { className: 'btn primary block', onClick: onClose }, 'Nice!')));
+  const SettingsSheet = ({ onClose, teacher, setTeacher, minimal, setMinimal, reset }) => h(Sheet, { onClose },
+    h('div', { className: 'h1', style: { marginBottom: 12 } }, 'Settings'),
+    h('div', { className: 'list' },
+      h('div', { className: 'item' }, h('div', { className: 'grow' }, h('div', { className: 't' }, 'Teacher view (demo)'), h('div', { className: 's' }, 'Approve homework, run battles and bosses')),
+        h('button', { className: cx('switch', teacher && 'on'), role: 'switch', 'aria-checked': teacher, 'aria-label': 'Teacher view', onClick: () => setTeacher(!teacher) }, h('span'))),
+      h('div', { className: 'item' }, h('div', { className: 'grow' }, h('div', { className: 't' }, 'Minimal mode'), h('div', { className: 's' }, 'Progress and stats with less game decoration')),
+        h('button', { className: cx('switch', minimal && 'on'), role: 'switch', 'aria-checked': minimal, 'aria-label': 'Minimal mode', onClick: () => setMinimal(!minimal) }, h('span')))),
+    h('button', { className: 'btn ghost block', style: { marginTop: 14 }, onClick: reset }, 'Reset demo'));
 
   // ---------------------------------------------------------------- teacher
   const TeacherVerify = ({ s, d, now, verify, returnSub }) => {
     const [stars, setStars] = useState({});
     const [crit, setCrit] = useState({});
     if (!d.pendingQueue.length) {
-      return h('div', { className: 'card', style: { textAlign: 'center', padding: 24 } },
-        h('div', { style: { fontSize: 36 } }, '✅'), h('div', { className: 'h2', style: { marginTop: 8 } }, 'All caught up'),
-        h('div', { className: 'tiny muted', style: { marginTop: 4 } }, 'Switch to Student, do a homework, then verify it here to see the damage land.'));
+      return h('div', { className: 'card', style: { textAlign: 'center', padding: 24 } }, h('div', { style: { fontSize: 36 } }, '✅'), h('div', { className: 'h2', style: { marginTop: 8 } }, 'All caught up'),
+        h('div', { className: 'tiny muted', style: { marginTop: 4 } }, 'Exit teacher view, attack with a homework as Islom, then approve it here to see the damage land.'));
     }
-    return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 12 } },
-      d.pendingQueue.map((sub) => {
-        const hw = s.homeworks.find((x) => x.id === sub.hwId);
-        const st = stars[sub.id] || 2;
-        const isCrit = st === 3 || !!crit[sub.id];
-        const dmg = G.calcDamage({ hw, statuses: sub.statuses, audio: sub.audio, submittedAt: sub.submittedAt, streak: sub.streak, stars: isCrit ? 3 : st });
-        const fort = G.fortressDamage(dmg.total, s.myGuild.members.length, d.enemyShield);
-        const m = s.myGuild.members.find((x) => x.id === sub.who);
-        return h('div', { key: sub.id, className: 'card', style: { padding: 14 } },
-          h('div', { className: 'row', style: { marginBottom: 10 } },
-            h(PersonAv, { p: m }),
-            h('div', { className: 'grow' }, h('div', { style: { fontWeight: 800 } }, m.name), h('div', { className: 'tiny muted' }, hw.title + ' · ' + ago(sub.submittedAt, now))),
-            dmg.timing === 'early' && h(Badge, { k: 'b-yellow' }, '⚡ Early'),
-            dmg.timing === 'late' && h(Badge, { k: 'b-red' }, 'Late')),
-          hw.tasks.map((t, i) => h('div', { key: i, className: 'row tiny', style: { padding: '5px 0', borderTop: i ? '1px solid var(--border)' : 0 } },
-            h('span', { className: 'grow' }, t.label),
-            t.type === 'speaking' && (sub.audio[i] ? h('span', { style: { color: 'var(--lime)' } }, '🎧 ' + sub.audio[i]) : h('span', { style: { color: 'var(--orange)' } }, 'no audio')),
-            h('span', { className: cx('badge', { 'Full': 'b-lime', '75%': 'b-gold', '50%': 'b-orange' }[sub.statuses[i]] || 'b-grey') }, sub.statuses[i]))),
-          h('div', { className: 'row', style: { marginTop: 12 } },
-            h('div', { className: 'stars grow' }, [1, 2, 3].map((n) => h('button', { key: n, className: n <= st ? 'on' : '', onClick: () => setStars((x) => ({ ...x, [sub.id]: n })), 'aria-label': n + ' stars' }, '⭐'))),
-            h('label', { className: 'row tiny', style: { gap: 6, fontWeight: 700, color: isCrit ? 'var(--gold)' : 'var(--text-2)' } },
-              h('input', { type: 'checkbox', checked: isCrit, disabled: st === 3, onChange: (e) => setCrit((x) => ({ ...x, [sub.id]: e.target.checked })) }), '💥 Critical Hit')),
-          h('div', { className: 'row', style: { marginTop: 12 } },
-            h('button', { className: 'btn ghost sm', onClick: () => returnSub(sub) }, 'Send back'),
-            h('button', { className: 'btn primary grow', onClick: () => verify(sub, isCrit ? 3 : st) }, 'Verify · ' + fort + ' damage')));
-      }));
+    return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 12 } }, d.pendingQueue.map((sub) => {
+      const hw = s.homeworks.find((x) => x.id === sub.hwId);
+      const st = stars[sub.id] || 2;
+      const isCrit = st === 3 || !!crit[sub.id];
+      const dmg = G.calcDamage({ hw, statuses: sub.statuses, audio: sub.audio, submittedAt: sub.submittedAt, streak: sub.streak, stars: isCrit ? 3 : st });
+      const fort = G.fortressDamage(dmg.total, s.myGuild.members.length, d.enemyShield);
+      const m = s.myGuild.members.find((x) => x.id === sub.who);
+      return h('div', { key: sub.id, className: 'card' },
+        h('div', { className: 'row', style: { marginBottom: 10 } }, h(Face, { face: m.face, size: 40 }),
+          h('div', { className: 'grow' }, h('div', { style: { fontWeight: 800 } }, m.name), h('div', { className: 'tiny muted' }, hw.title + ' · ' + ago(sub.submittedAt, now))),
+          dmg.timing === 'early' && h(Badge, { k: 'b-gold' }, '⚡ Early'), dmg.timing === 'late' && h(Badge, { k: 'b-red' }, 'Late')),
+        hw.tasks.map((t, i) => h('div', { key: i, className: 'row tiny', style: { padding: '6px 0', borderTop: '1px solid var(--border)' } },
+          h('span', { className: 'grow' }, t.label),
+          t.type === 'speaking' && (sub.audio[i] ? h('span', { style: { color: 'var(--green)' } }, '🎧 ' + sub.audio[i]) : h('span', { style: { color: 'var(--gold)' } }, 'no audio')),
+          h(Badge, { k: { 'Full': 'b-green', '75%': 'b-gold', '50%': 'b-gold' }[sub.statuses[i]] || 'b-grey' }, sub.statuses[i]))),
+        h('div', { className: 'row', style: { marginTop: 12 } },
+          h('div', { className: 'stars grow' }, [1, 2, 3].map((n) => h('button', { key: n, className: n <= st ? 'on' : '', onClick: () => setStars((x) => ({ ...x, [sub.id]: n })), 'aria-label': n + ' stars' }, '⭐'))),
+          h('label', { className: 'row tiny', style: { gap: 6, fontWeight: 700, color: isCrit ? 'var(--gold)' : 'var(--text-2)' } },
+            h('input', { type: 'checkbox', checked: isCrit, disabled: st === 3, onChange: (e) => setCrit((x) => ({ ...x, [sub.id]: e.target.checked })) }), '💥 Critical Hit')),
+        h('div', { className: 'row', style: { marginTop: 12 } },
+          h('button', { className: 'btn ghost sm', onClick: () => returnSub(sub) }, 'Send back'),
+          h('button', { className: 'btn gold grow', onClick: () => verify(sub, isCrit ? 3 : st) }, 'Approve · ' + fort + ' damage')));
+    }));
   };
 
   const TeacherBattles = ({ s, d, setMatch, flash }) => {
     const [pick, setPick] = useState(s.battle.otherGroups[0].id);
     return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 12 } },
+      h(BattleCard, { s, d, compact: true, onView: () => flash('Students see the full battle screen', '👀') }),
       h('div', { className: 'card' },
-        h('div', { className: 'eyebrow' }, 'This week'),
-        h('div', { className: 'row', style: { marginTop: 8 } },
-          h('div', { className: 'grow', style: { fontWeight: 800 } }, s.myGuild.emblem + ' ' + s.myGuild.name), h('span', { className: 'vs' }, 'VS'),
-          h('div', { className: 'grow', style: { fontWeight: 800, textAlign: 'right' } }, d.enemy.name + ' ' + d.enemy.emblem)),
-        h('div', { className: 'row tiny muted', style: { marginTop: 6 } }, h('span', { className: 'grow' }, d.usHP + ' HP'), h('span', null, fmtCountdown(d.battleLeft) + ' left'), h('span', { className: 'grow', style: { textAlign: 'right' } }, d.enemyHP + ' HP'))),
-      h('div', { className: 'card' },
-        h('div', { className: 'eyebrow', style: { marginBottom: 10 } }, 'Next week\'s matchup'),
+        h('div', { style: { fontWeight: 700, marginBottom: 10 } }, 'Next week\'s matchup'),
         h('div', { className: 'pill-tabs', style: { marginBottom: 12 } },
-          h('button', { className: s.battle.matchMode === 'auto' ? 'on' : '', onClick: () => setMatch('auto') }, 'Auto · similar level'),
+          h('button', { className: s.battle.matchMode === 'auto' ? 'on' : '', onClick: () => setMatch('auto') }, 'Auto · same level'),
           h('button', { className: s.battle.matchMode === 'manual' ? 'on' : '', onClick: () => setMatch('manual') }, 'I choose')),
         s.battle.matchMode === 'auto'
-          ? h('div', { className: 'tiny muted' }, 'Battles start every Monday 08:00 against a group of the same level. Scores are normalised for group size.')
+          ? h('div', { className: 'tiny muted' }, 'Battles start every Monday 08:00 against a group of the same level. Scores are adjusted for group size.')
           : h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
-            s.battle.otherGroups.map((g) => h('button', { key: g.id, className: 'card row', style: { padding: 10, textAlign: 'left', borderColor: pick === g.id ? 'var(--lime)' : 'var(--border)' }, onClick: () => setPick(g.id) },
-              h('span', { style: { fontSize: 20 } }, g.emblem),
-              h('div', { className: 'grow' }, h('div', { style: { fontWeight: 700 } }, g.name), h('div', { className: 'tiny muted' }, g.teacher + ' · ' + g.members + ' students')),
-              h(Badge, { k: g.level === s.myGuild.level ? 'b-lime' : 'b-orange' }, g.level))),
-            h('button', { className: 'btn primary block', onClick: () => flash('📅 Next battle set vs ' + s.battle.otherGroups.find((g) => g.id === pick).name) }, 'Schedule for Monday'))));
+            h('div', { className: 'list' }, s.battle.otherGroups.map((g) => h('button', { key: g.id, className: cx('item', pick === g.id && 'hl'), onClick: () => setPick(g.id) },
+              h(Crest, { tone: 'red', crest: g.crest, size: 32, spikes: false }),
+              h('div', { className: 'grow' }, h('div', { className: 't' }, g.name), h('div', { className: 's' }, g.teacher + ' · ' + g.members + ' students')),
+              h(Badge, { k: g.level === s.myGuild.level ? 'b-green' : 'b-gold' }, g.level)))),
+            h('button', { className: 'btn gold block', onClick: () => flash('📅 Next battle set vs ' + s.battle.otherGroups.find((g) => g.id === pick).name) }, 'Schedule for Monday'))));
   };
 
   const TeacherBosses = ({ s, now, addBoss }) => {
@@ -733,65 +708,51 @@
     const [hp, setHp] = useState(G.BOSS_HP_PER_MEMBER * s.myGuild.members.length);
     const [days, setDays] = useState(21);
     return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 12 } },
-      s.bosses.slice().sort((a, b) => a.unit - b.unit).map((b) => h('div', { key: b.unit + b.name, className: 'card row', style: { padding: 12 } },
-        h(Clay, { icon: b.icon, color: b.defeated ? '#0FA88A' : '#8B5CF6', size: 'sm' }),
-        h('div', { className: 'grow' }, h('div', { style: { fontWeight: 700 } }, b.name), h('div', { className: 'tiny muted' }, 'Unit ' + b.unit + ' · ' + b.hp + ' HP · ' + (b.defeated ? 'defeated' : 'due in ' + fmtCountdown(b.deadline - now)))),
-        h('span', { className: 'num' }, pct(b.hp - b.dealt, b.hp) + '%'))),
+      h('div', { className: 'list' }, s.bosses.slice().sort((a, b) => a.unit - b.unit).map((b) => h('div', { key: b.unit + b.name, className: 'item' },
+        h(Crest, { tone: b.defeated ? 'green' : 'purple', icon: b.icon, size: 36, rim: 'gold', spikes: false }),
+        h('div', { className: 'grow' }, h('div', { className: 't' }, b.name), h('div', { className: 's' }, 'Unit ' + b.unit + ' · ' + fmt(b.hp) + ' HP · ' + (b.defeated ? 'defeated' : fmtLeft(b.deadline - now) + ' left'))),
+        h('span', { className: 'num' }, pct(b.hp - b.dealt, b.hp) + '%')))),
       h('div', { className: 'card', style: { display: 'flex', flexDirection: 'column', gap: 10 } },
         h('div', { className: 'h2' }, 'Create a boss'),
-        h('div', { className: 'grid2' },
-          h('label', { className: 'tiny muted' }, 'Unit', h('input', { className: 'field', type: 'number', min: 1, value: unit, onChange: (e) => setUnit(+e.target.value) })),
-          h('label', { className: 'tiny muted' }, 'HP', h('input', { className: 'field', type: 'number', min: 100, step: 100, value: hp, onChange: (e) => setHp(+e.target.value) }))),
+        h('div', { className: 'row' },
+          h('label', { className: 'tiny muted grow' }, 'Unit', h('input', { className: 'field', type: 'number', min: 1, value: unit, onChange: (e) => setUnit(+e.target.value) })),
+          h('label', { className: 'tiny muted grow' }, 'HP', h('input', { className: 'field', type: 'number', min: 100, step: 100, value: hp, onChange: (e) => setHp(+e.target.value) }))),
         h('label', { className: 'tiny muted' }, 'Name (after the unit topic)', h('input', { className: 'field', placeholder: 'e.g. The Passive Voice Phantom', value: name, onChange: (e) => setName(e.target.value) })),
         h('label', { className: 'tiny muted' }, 'Deadline in days', h('input', { className: 'field', type: 'number', min: 1, value: days, onChange: (e) => setDays(+e.target.value) })),
-        h('div', { className: 'tiny muted' }, 'Suggested HP: ' + G.BOSS_HP_PER_MEMBER + ' × ' + s.myGuild.members.length + ' students = ' + G.BOSS_HP_PER_MEMBER * s.myGuild.members.length),
-        h('button', { className: 'btn primary block', disabled: !name.trim() || hp < 100, onClick: () => { addBoss({ unit, name: name.trim(), icon: '👹', hp, dealt: 0, deadline: now + days * 86400000 }); setName(''); } }, 'Create boss')));
+        h('div', { className: 'tiny muted' }, 'Suggested HP: ' + G.BOSS_HP_PER_MEMBER + ' × ' + s.myGuild.members.length + ' students = ' + fmt(G.BOSS_HP_PER_MEMBER * s.myGuild.members.length)),
+        h('button', { className: 'btn gold block', disabled: !name.trim() || hp < 100, onClick: () => { addBoss({ unit, name: name.trim(), icon: '👹', hp, dealt: 0, deadline: now + days * 86400000 }); setName(''); } }, 'Create boss')));
   };
 
   const TeacherClass = ({ s, d }) => {
     const rows = s.myGuild.members.map((m) => {
-      const stop = m.me ? d.myStop : m.stop;
-      const attacked = s.myGuild.attackers.includes(m.id);
-      const behind = !attacked && stop < 2;
-      return { m, stop, attacked, behind };
-    }).sort((a, b) => (b.behind ? 1 : 0) - (a.behind ? 1 : 0));
-    const popularity = s.sideQuests.filter((q) => q.level === 'B1').map((q, i) => ({ q, n: [14, 9, 6, 11][i] || 3 + (s.me.sideDone.includes(q.id) ? 1 : 0) }));
-    const max = Math.max(...popularity.map((p) => p.n));
+      const lesson = m.me ? d.lessonIdx + 1 : m.lesson;
+      return { m, lesson, behind: m.week === 0 || lesson < 2 };
+    }).sort((a, b) => (b.behind ? 1 : 0) - (a.behind ? 1 : 0) || a.m.week - b.m.week);
+    const pop = s.sideQuests.map((q, i) => ({ q, n: [14, 9, 6, 11][i] + (s.me.sideDone.includes(q.id) ? 1 : 0) }));
+    const max = Math.max(...pop.map((p) => p.n));
     return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 12 } },
-      h('div', { className: 'tiny', style: { padding: '8px 12px', borderRadius: 10, background: 'var(--blue-soft)', color: '#93C5FD', fontWeight: 600 } }, '🔒 Only you can see this. Students only ever see counts, never names.'),
-      h('div', { className: 'card', style: { padding: '4px 14px' } },
-        rows.map(({ m, stop, attacked, behind }) => h('div', { key: m.id, className: 'feed-item', style: { alignItems: 'center' } },
-          h(PersonAv, { p: m }),
-          h('div', { className: 'grow' }, h('div', { style: { fontWeight: 600 } }, m.name), h('div', { className: 'tiny muted' }, 'At ' + s.homeworks[Math.min(stop, s.homeworks.length - 1)].title)),
-          behind ? h(Badge, { k: 'b-red' }, 'Needs help') : attacked ? h(Badge, { k: 'b-lime' }, 'Active') : h(Badge, { k: 'b-gold' }, 'Not yet')))),
-      h(Section, { title: 'Popular side quests' },
-        h('div', { className: 'card', style: { display: 'flex', flexDirection: 'column', gap: 10 } },
-          popularity.map(({ q, n }) => h('div', { key: q.id },
-            h('div', { className: 'row tiny', style: { marginBottom: 4 } }, h('span', { className: 'grow' }, q.icon + ' ' + q.title), h('span', { className: 'num' }, n)),
-            h(HP, { value: n, max, color: q.color, size: 'thin' }))))));
+      h('div', { className: 'card tiny', style: { color: 'var(--blue-hi)', borderColor: 'rgba(47,128,255,0.35)' } }, '🔒 Only you can see this. Students only ever see counts, never names.'),
+      h('div', { className: 'list' }, rows.map(({ m, lesson, behind }) => h('div', { key: m.id, className: 'item' },
+        h(Face, { face: m.face, size: 34 }),
+        h('div', { className: 'grow' }, h('div', { className: 't' }, m.name), h('div', { className: 's' }, 'Lesson ' + lesson + ' · ' + fmt(m.week) + ' damage this week')),
+        behind ? h(Badge, { k: 'b-red' }, 'Needs help') : h(Badge, { k: 'b-green' }, 'Active')))),
+      h(SectionHead, { title: 'Popular extra quests' }),
+      h('div', { className: 'card', style: { display: 'flex', flexDirection: 'column', gap: 10 } }, pop.map(({ q, n }) => h('div', { key: q.id },
+        h('div', { className: 'row tiny', style: { marginBottom: 4 } }, h('span', { className: 'grow' }, q.icon + ' ' + q.title), h('span', { className: 'num' }, n)),
+        h(Bar, { value: n, max, color: q.color })))));
   };
-
-  const TeacherScreen = ({ s, d, now, tab, verify, returnSub, setMatch, addBoss, flash }) =>
-    h('div', { className: 'page' },
-      h('div', null, h('div', { className: 'eyebrow' }, 'Teacher · ' + s.myGuild.teacher + ' · ' + s.myGuild.name),
-        h('h1', { className: 'h1' }, { verify: 'Verify homework', battles: 'Battles', bosses: 'Bosses', class: 'Class' }[tab])),
-      tab === 'verify' && h(TeacherVerify, { s, d, now, verify, returnSub }),
-      tab === 'battles' && h(TeacherBattles, { s, d, setMatch, flash }),
-      tab === 'bosses' && h(TeacherBosses, { s, now, addBoss }),
-      tab === 'class' && h(TeacherClass, { s, d }));
 
   // ---------------------------------------------------------------- app
   const App = () => {
     const [s, setS] = useState(loadState);
     const [now, setNow] = useState(Date.now());
-    const [role, setRole] = useState(() => loadPref('uq-role', 'student'));
-    const [tab, setTab] = useState('map');
+    const [tab, setTab] = useState('home');
     const [ttab, setTtab] = useState('verify');
+    const [teacher, setTeacher] = useState(() => loadPref('uq-teacher', false));
     const [minimal, setMinimal] = useState(() => loadPref('uq-minimal', false));
-    const [hwOpen, setHwOpen] = useState(null);
-    const [questOpen, setQuestOpen] = useState(null);
-    const [shopOpen, setShopOpen] = useState(false);
-    const [chest, setChest] = useState(null);
+    const [battleOpen, setBattleOpen] = useState(false);
+    const [hwSel, setHwSel] = useState(null);
+    const [sheet, setSheet] = useState(null);
     const [toasts, setToasts] = useState([]);
     const [boom, setBoom] = useState(null);
     const [fresh, setFresh] = useState(null);
@@ -799,13 +760,12 @@
     sRef.current = s;
 
     useEffect(() => saveState(s), [s]);
-    useEffect(() => savePref('uq-role', role), [role]);
+    useEffect(() => savePref('uq-teacher', teacher), [teacher]);
     useEffect(() => savePref('uq-minimal', minimal), [minimal]);
     useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
-    useEffect(() => { window.scrollTo(0, 0); }, [tab, ttab, role]);
+    useEffect(() => { window.scrollTo(0, 0); }, [tab, ttab, teacher, battleOpen]);
 
     const d = useMemo(() => derive(s, now), [s, now]);
-
     const flash = (text, icon = '✨') => {
       const id = uid();
       setToasts((t) => [...t, { id, text, icon }].slice(-3));
@@ -813,52 +773,55 @@
     };
     const pop = (n, label, crit) => { setBoom({ n, label, crit, k: uid() }); setTimeout(() => setBoom(null), 1400); };
     const up = (fn) => setS((prev) => { const next = JSON.parse(JSON.stringify(prev)); fn(next); return next; });
+    const close = () => setSheet(null);
 
-    // Push-style notice on open: counts only, never names.
-    useEffect(() => {
-      const dd = derive(sRef.current, Date.now());
-      if (dd.notAttacked > 0) setTimeout(() => flash('Your fortress has ' + pct(dd.usHP, G.FORTRESS_HP) + '% HP and ' + fmtCountdown(dd.battleLeft) + ' to go. ' + dd.notAttacked + ' teammates haven\'t attacked yet.', '🔔'), 700);
-    }, []);
+    // Push-style notifications: counts only, never names.
+    const notifs = [];
+    if (d.notAttacked > 0) notifs.push({ icon: '🔔', text: 'Your fortress has ' + pct(d.usHP, G.FORTRESS_HP) + '% HP and ' + fmtLeft(d.battleLeft) + ' to go. ' + d.notAttacked + ' teammates haven\'t attacked yet.' });
+    if (d.nextHw && !s.me.submitted[d.nextHw.id]) notifs.push({ icon: '⚡', text: d.nextHw.title + ' is due in ' + fmtLeft(d.nextHw.dueAt - now) + '. Submit 24h early for an Early Strike (×1.5).' });
+    if (d.liveBoss) notifs.push({ icon: d.liveBoss.icon, text: d.liveBoss.name + ' has ' + pct(d.liveBoss.hp - d.liveBoss.dealt, d.liveBoss.hp) + '% HP left.' });
+    if (s.me.chests > 0) notifs.push({ icon: '🎁', text: 'You have a chest to open on your profile.' });
 
     // Live battle: the other guild keeps attacking while the app is open.
     useEffect(() => {
       const t = setInterval(() => {
         const cur = sRef.current;
         const dd = derive(cur, Date.now());
-        if (dd.usHP < 200 || dd.battleLeft <= 0) return;
+        if (dd.usHP < 600 || dd.battleLeft <= 0) return;
         const enemy = cur.battle.enemy;
         const m = enemy.members[Math.floor(Math.random() * enemy.members.length)];
-        const crit = Math.random() < 0.18;
-        const raw = Math.round((30 + Math.random() * 45) * (crit ? 2 : 1));
-        const dmg = G.fortressDamage(raw, enemy.members.length, dd.myShield);
+        const type = ['grammar', 'vocab', 'writing', 'speaking'][Math.floor(Math.random() * 4)];
+        const crit = Math.random() < 0.15;
+        const dmg = G.fortressDamage(G.DAMAGE[type] * (crit ? 2 : 1), enemy.members.length, dd.myShield);
         const id = uid();
         up((n) => {
-          n.feed.push({ id, at: Date.now(), side: 'enemy', who: m.name, hw: 'Unit 4 · Present Perfect', dmg, crit });
+          n.feed.push({ id, at: Date.now(), side: 'enemy', who: m.name, what: 'completed a ' + TYPE_NAME[type] + ' task', dmg, crit });
           if (!n.battle.enemy.attackers.includes(m.id)) n.battle.enemy.attackers.push(m.id);
         });
         setFresh(id);
-        flash(m.name + (crit ? ' landed a Critical Hit on' : ' hit') + ' your fortress for ' + dmg, crit ? '💥' : '⚔️');
-      }, 40000);
+        flash(m.name + ' (Dragons) hit your fortress for ' + dmg, crit ? '💥' : '⚔️');
+      }, 45000);
       return () => clearInterval(t);
     }, []);
 
     // ---------- student actions
+    const setStatus = (hwId, i, st) => up((n) => {
+      const hw = n.homeworks.find((x) => x.id === hwId);
+      n.me.tasks[hwId] = n.me.tasks[hwId] || hw.tasks.map(() => 'Not started');
+      n.me.tasks[hwId][i] = st;
+    });
+    const setAudio = (hwId, i, a) => up((n) => { n.me.audio[hwId] = { ...(n.me.audio[hwId] || {}), [i]: a }; });
     const submit = (hw, statuses, audio, est, fortress) => {
-      const id = uid();
-      const sid = uid();
+      const id = uid(), sid = uid();
       up((n) => {
-        n.me.tasks[hw.id] = statuses;
-        n.me.audio[hw.id] = audio;
         n.me.submitted[hw.id] = 'pending';
         n.submissions.push({ id: sid, who: n.me.id, whoName: n.me.name, hwId: hw.id, statuses, audio, submittedAt: Date.now(), streak: n.me.streak, state: 'pending', feedId: id });
-        n.feed.push({ id, at: Date.now(), side: 'us', who: n.me.name, hw: hw.title, dmg: fortress, pending: true, early: est.timing === 'early' });
-        if (!n.myGuild.attackers.includes(n.me.id)) n.myGuild.attackers.push(n.me.id);
+        n.feed.push({ id, at: Date.now(), side: 'us', who: n.me.name, what: est.allFull ? 'completed a full homework' : 'submitted homework', dmg: fortress, pending: true, early: est.timing === 'early' });
       });
       setFresh(id);
-      pop(fortress, '⏳ Pending · lands when your teacher verifies', false);
-      flash('Attack sent! Your guild shield went up 🛡️', '⚔️');
+      pop(fortress, '⏳ Pending · lands when your teacher checks it');
+      flash('Attack sent! To approve it: Profile → ⚙️ → Teacher view.', '⚔️');
     };
-
     const completeQuest = (q) => {
       const rewarded = sRef.current.me.sideToday < G.SIDE_QUEST_DAILY_CAP;
       const dmg = rewarded ? G.fortressDamage(G.SIDE_QUEST_DAMAGE, sRef.current.myGuild.members.length, d.enemyShield) : 0;
@@ -867,12 +830,12 @@
         n.me.sideDone.push(q.id);
         if (rewarded) {
           n.me.sideToday += 1; n.me.coins += q.coins; n.me.xp += q.xp;
-          n.feed.push({ id, at: Date.now(), side: 'us', who: n.me.name, hw: q.title, dmg, quest: true });
+          n.feed.push({ id, at: Date.now(), side: 'us', who: n.me.name, what: 'finished an extra quest', dmg, quest: true });
+          const meM = n.myGuild.members.find((m) => m.me); meM.week += dmg; n.me.totalDamage += dmg;
         }
       });
       if (rewarded) { setFresh(id); flash('+' + q.coins + ' coins · +' + q.xp + ' XP · ' + dmg + ' bonus damage', '🪙'); } else flash('Quest done — daily reward cap reached', '✔');
     };
-
     const buy = (it) => {
       if (s.me.coins < it.price) return;
       up((n) => {
@@ -884,16 +847,12 @@
       flash(it.name + (it.kind === 'consumable' ? ' added' : ' unlocked & equipped'), '🛍️');
     };
     const equip = (it) => up((n) => { if (it.kind === 'avatar') n.me.avatar = it.id; else n.me.frame = it.id; });
-
     const openChest = () => {
-      const locked = s.shop.filter((x) => (x.kind === 'avatar' || x.kind === 'frame') && !s.me.owned.includes(x.id));
-      const win = Math.random() < 0.6 && locked.length ? locked[Math.floor(Math.random() * locked.length)] : null;
+      const lockedItems = s.shop.filter((x) => (x.kind === 'avatar' || x.kind === 'frame') && !s.me.owned.includes(x.id));
+      const win = Math.random() < 0.6 && lockedItems.length ? lockedItems[Math.floor(Math.random() * lockedItems.length)] : null;
       const coins = 30 + Math.floor(Math.random() * 4) * 10;
-      up((n) => {
-        n.me.chests -= 1;
-        if (win) n.me.owned.push(win.id); else n.me.coins += coins;
-      });
-      setChest(win ? { icon: win.icon || '🖼️', label: (win.kind === 'avatar' ? 'Avatar · ' : 'Frame · ') + win.name } : { icon: '🪙', label: coins + ' coins' });
+      up((n) => { n.me.chests -= 1; if (win) n.me.owned.push(win.id); else n.me.coins += coins; });
+      setSheet({ kind: 'chest', reward: win ? { icon: win.icon || '🖼️', label: (win.kind === 'avatar' ? 'Avatar · ' : 'Frame · ') + win.name } : { icon: '🪙', label: coins + ' coins' } });
     };
 
     // ---------- teacher actions
@@ -901,20 +860,18 @@
       const cur = sRef.current;
       const hw = cur.homeworks.find((x) => x.id === sub.hwId);
       const dmg = G.calcDamage({ hw, statuses: sub.statuses, audio: sub.audio, submittedAt: sub.submittedAt, streak: sub.streak, stars });
-      const dd = derive(cur, Date.now());
-      const fort = G.fortressDamage(dmg.total, cur.myGuild.members.length, dd.enemyShield);
+      const fort = G.fortressDamage(dmg.total, cur.myGuild.members.length, derive(cur, Date.now()).enemyShield);
       const isMe = sub.who === cur.me.id;
       const feedId = sub.feedId || uid();
       let defeated = null;
       up((n) => {
         const x = n.submissions.find((y) => y.id === sub.id);
         x.state = 'verified'; x.stars = stars; x.dmg = fort;
+        const entry = { id: feedId, at: Date.now(), side: 'us', who: sub.whoName, what: dmg.allFull ? 'completed a full homework' : 'completed homework', dmg: fort, crit: dmg.crit, early: dmg.timing === 'early' };
         const f = n.feed.find((y) => y.id === feedId);
-        const entry = { id: feedId, at: Date.now(), side: 'us', who: sub.whoName, hw: hw.title, dmg: fort, crit: dmg.crit, early: dmg.timing === 'early' };
         if (f) Object.assign(f, entry, { pending: false }); else n.feed.push(entry);
         const member = n.myGuild.members.find((m) => m.id === sub.who);
-        if (!n.myGuild.attackers.includes(sub.who)) n.myGuild.attackers.push(sub.who);
-        if (member && !member.me && member.stop === n.homeworks.findIndex((y) => y.id === hw.id)) member.stop += 1;
+        if (member) { member.week += fort; if (!member.me && member.lesson === hw.lesson) member.lesson += 1; }
         const boss = n.bosses.find((b) => b.unit === hw.unit && !b.defeated);
         if (boss) {
           boss.dealt = Math.min(boss.hp, boss.dealt + dmg.total);
@@ -924,21 +881,27 @@
         }
         if (isMe) {
           n.me.submitted[hw.id] = 'verified';
+          n.me.totalDamage += fort;
           n.me.xp += Math.round(dmg.total / 2);
           n.me.coins += 10 + (dmg.crit ? 15 : 0);
           n.me.seasonPts += dmg.total;
-          n.me.streak += dmg.allFull ? 1 : 0;
-          if (dmg.allFull) n.me.chests += 1;
-          const speakingOk = hw.tasks.some((t, i) => t.type === 'speaking' && sub.audio[i] && sub.statuses[i] === 'Full');
-          if (speakingOk) n.me.speakingDone = (n.me.speakingDone || 0) + 1;
-          if (n.me.speakingDone >= 1 && !n.me.titles.includes('Speaking Specialist')) n.me.titles.push('Speaking Specialist');
-          if (dmg.timing === 'early' && !n.me.titles.includes('Early Bird')) n.me.titles.push('Early Bird');
+          if (dmg.crit) n.me.crits = (n.me.crits || 0) + 1;
+          if (dmg.allFull) {
+            n.me.chests += 1; n.me.fullCount += 1; n.me.streak += 1;
+            const gap = n.me.week.indexOf(0);
+            if (gap >= 0) n.me.week[gap] = 1;
+          }
+          if (dmg.timing === 'early') n.me.earlyCount += sub.statuses.filter(isMarked).length;
+          if (hw.tasks.some((t, i) => t.type === 'speaking' && sub.audio[i])) {
+            n.me.speakingCount += 1;
+            if (n.me.speakingCount >= 5 && !n.me.titles.includes('Speaking Specialist')) n.me.titles.push('Speaking Specialist');
+          }
         }
       });
       setFresh(feedId);
-      pop(fort, dmg.crit ? '💥 Critical Hit!' : 'Damage landed on ' + cur.battle.enemy.name, dmg.crit);
-      flash(sub.whoName + '\'s homework verified — ' + fort + ' damage landed' + (dmg.allFull && isMe ? ' · 🎁 chest earned' : ''), '✅');
-      if (defeated) setTimeout(() => flash(defeated + ' is defeated! The next region is unlocked 🗺️', '🏆'), 1500);
+      pop(fort, dmg.crit ? '💥 Critical Hit!' : 'Damage landed on the Dragons', dmg.crit);
+      flash(sub.whoName + '\'s homework approved — ' + fort + ' damage landed' + (dmg.allFull && isMe ? ' · 🎁 chest earned' : ''), '✅');
+      if (defeated) setTimeout(() => flash(defeated + ' is defeated! The next unit is unlocked 🗺️', '🏆'), 1500);
     };
     const returnSub = (sub) => {
       up((n) => {
@@ -946,55 +909,69 @@
         if (sub.feedId) n.feed = n.feed.filter((f) => f.id !== sub.feedId);
         if (sub.who === n.me.id) delete n.me.submitted[sub.hwId];
       });
-      flash('Sent back to ' + firstName(sub.whoName) + ' to improve — no damage this time', '↩️');
+      flash('Sent back to ' + sub.whoName + ' to improve — no damage this time', '↩️');
     };
-
     const reset = () => {
       if (!window.confirm('Reset the demo to its starting state?')) return;
-      const fresh0 = G.seed();
-      setS(fresh0); setTab('map');
+      setS(G.seed()); setTab('home'); setTeacher(false); setSheet(null); setBattleOpen(false);
       flash('Demo reset', '↺');
     };
 
-    const studentTabs = [
-      ['map', '🗺️', 'Map'], ['battle', '⚔️', 'Battle'], ['raid', '🗿', 'Raid'], ['quests', '📜', 'Quests'], ['me', '🦊', 'Me'],
-    ];
-    const teacherTabs = [
-      ['verify', '✅', 'Verify'], ['battles', '⚔️', 'Battles'], ['bosses', '👹', 'Bosses'], ['class', '👥', 'Class'],
-    ];
-    const myAvIcon = (s.shop.find((x) => x.id === s.me.avatar) || {}).icon;
+    const go = (k) => { setBattleOpen(false); setTab(k); };
+    const openTask = (hwId, idx) => setSheet({ kind: 'task', hwId, idx });
+    const studentTabs = [['home', 'home', 'Home'], ['map', 'map', 'Map'], ['homework', 'list', 'Homework'], ['guild', 'guild', 'Guild'], ['profile', 'user', 'Profile']];
+    const teacherTabs = [['verify', 'check', 'Approve'], ['battles', 'swords', 'Battles'], ['bosses', 'guild', 'Bosses'], ['class', 'user', 'Class']];
 
+    let main;
+    if (teacher) {
+      main = h('div', null,
+        h('header', { className: 'topbar' },
+          h(Crest, { tone: 'blue', crest: 'lion', size: 30, spikes: false }),
+          h('div', { className: 'grow' }, h('div', { style: { fontWeight: 800 } }, { verify: 'Approve homework', battles: 'Battles', bosses: 'Bosses', class: 'Class' }[ttab]), h('div', { className: 'tiny muted' }, 'Teacher · ' + s.myGuild.teacher + ' · ' + s.myGuild.name)),
+          h('button', { className: 'btn outline-gold', onClick: () => setTeacher(false) }, 'Exit')),
+        h('div', { className: 'page' },
+          ttab === 'verify' && h(TeacherVerify, { s, d, now, verify, returnSub }),
+          ttab === 'battles' && h(TeacherBattles, { s, d, setMatch: (m) => up((n) => { n.battle.matchMode = m; }), flash }),
+          ttab === 'bosses' && h(TeacherBosses, { s, now, addBoss: (b) => { up((n) => { n.bosses.push(b); }); flash('Boss created: ' + b.name, '👹'); } }),
+          ttab === 'class' && h(TeacherClass, { s, d })));
+    } else if (battleOpen) {
+      main = h(BattleScreen, { s, d, now, fresh, back: () => setBattleOpen(false), openRules: () => setSheet({ kind: 'rules' }) });
+    } else {
+      main = h('main', null,
+        tab === 'home' && h(HomeScreen, { s, d, openTask, openBattle: () => setBattleOpen(true), openNotifs: () => setSheet({ kind: 'notifs' }), notifCount: notifs.length }),
+        tab === 'map' && h(MapScreen, { s, d, openHw: (id) => { setHwSel(id); go('homework'); }, goHomework: () => { setHwSel(null); go('homework'); },
+          openLocked: () => setSheet({ kind: 'locked' }), openRaid: () => go('guild'), openInfo: () => setSheet({ kind: 'mapinfo' }) }),
+        tab === 'homework' && h(HomeworkScreen, { s, d, now, hwSel, setHwSel, openTask, openQuests: () => setSheet({ kind: 'quests' }), submit }),
+        tab === 'guild' && h(GuildScreen, { s, d, now, openBattle: () => setBattleOpen(true), toggleDuel: () => up((n) => { n.me.duel = !n.me.duel; }) }),
+        tab === 'profile' && h(ProfileScreen, { s, d, openSettings: () => setSheet({ kind: 'settings' }), openShop: () => setSheet({ kind: 'shop' }), openChest,
+          openAch: () => setSheet({ kind: 'ach' }), setTitle: (t) => up((n) => { n.me.title = t; }) }));
+    }
+
+    const tabs = teacher ? teacherTabs : studentTabs;
+    const S = sheet || {};
     return h('div', { className: cx('shell', minimal && 'minimal') },
-      h('header', { className: 'topbar' },
-        h('div', { className: 'brand' }, h('div', { className: 'mark' }, 'Q'), h('div', { className: 'wm' }, 'Up', h('span', null, 'Lingo'), ' Quest')),
-        role === 'student' && h(React.Fragment, null,
-          h('span', { className: 'chip coins', title: 'Coins' }, '🪙 ' + s.me.coins),
-          h('span', { className: 'chip lvl', title: 'Level' }, 'Lv ' + d.lvl.lvl)),
-        h('div', { className: 'role-toggle', role: 'group', 'aria-label': 'Demo role' },
-          h('button', { className: role === 'student' ? 'on' : '', onClick: () => setRole('student') }, 'Student'),
-          h('button', { className: role === 'teacher' ? 'on' : '', onClick: () => setRole('teacher') }, 'Teacher'))),
-
-      role === 'student'
-        ? h('main', null,
-          tab === 'map' && h(MapScreen, { s, d, now, openHw: setHwOpen, go: setTab }),
-          tab === 'battle' && h(BattleScreen, { s, d, now, fresh, toggleDuel: () => up((n) => { n.me.duel = !n.me.duel; }) }),
-          tab === 'raid' && h(RaidScreen, { s, d, now, go: setTab }),
-          tab === 'quests' && h(QuestsScreen, { s, openQuest: setQuestOpen }),
-          tab === 'me' && h(ProfileScreen, { s, d, minimal, setMinimal, openShop: () => setShopOpen(true), openChest, setTitle: (t) => up((n) => { n.me.title = t; }), reset }))
-        : h('main', null, h(TeacherScreen, { s, d, now, tab: ttab, verify, returnSub, setMatch: (m) => up((n) => { n.battle.matchMode = m; }), addBoss: (b) => { up((n) => { n.bosses.push(b); }); flash('Boss created: ' + b.name, '👹'); }, flash })),
-
-      h('nav', { className: 'tabbar', style: role === 'teacher' ? { gridTemplateColumns: 'repeat(4, 1fr)' } : null },
-        (role === 'student' ? studentTabs : teacherTabs).map(([k, icon, label]) => {
-          const on = role === 'student' ? tab === k : ttab === k;
-          const dot = (role === 'teacher' && k === 'verify' && d.pendingQueue.length > 0) || (role === 'student' && k === 'me' && s.me.chests > 0);
-          return h('button', { key: k, className: cx('tab', on && 'on'), onClick: () => (role === 'student' ? setTab(k) : setTtab(k)), 'aria-current': on ? 'page' : undefined },
-            h('span', { className: 'ti' }, k === 'me' ? myAvIcon : icon), label, dot && h('span', { className: 'dot' }));
+      main,
+      h('nav', { className: 'tabbar', style: teacher ? { gridTemplateColumns: 'repeat(4, 1fr)' } : null },
+        tabs.map(([k, icon, label]) => {
+          const on = teacher ? ttab === k : tab === k;
+          const dot = (teacher && k === 'verify' && d.pendingQueue.length > 0) || (!teacher && k === 'profile' && s.me.chests > 0);
+          const solid = on && ['home', 'map', 'list', 'guild', 'user'].includes(icon);
+          return h('button', { key: k, className: cx('tab', on && 'on'), onClick: () => (teacher ? setTtab(k) : go(k)), 'aria-current': on ? 'page' : undefined },
+            h(Icon, { n: icon, s: 24, fill: solid ? 'currentColor' : 'none', w: 2 }), label, dot && h('span', { className: 'dot' }));
         })),
-
-      hwOpen && h(HomeworkSheet, { key: hwOpen, s, d, now, hwId: hwOpen, onClose: () => setHwOpen(null), submit }),
-      questOpen && h(QuestSheet, { key: questOpen, s, qId: questOpen, onClose: () => setQuestOpen(null), complete: completeQuest }),
-      shopOpen && h(ShopSheet, { s, onClose: () => setShopOpen(false), buy, equip }),
-      chest && h(ChestSheet, { reward: chest, onClose: () => setChest(null) }),
+      S.kind === 'task' && h(TaskSheet, { s, hwId: S.hwId, idx: S.idx, onClose: close, setStatus, setAudio }),
+      S.kind === 'rules' && h(RulesSheet, { onClose: close }),
+      S.kind === 'notifs' && h(NotifSheet, { items: notifs, onClose: close }),
+      S.kind === 'quests' && h(QuestLibrary, { s, onClose: close, openQuest: (id) => setSheet({ kind: 'quest', id }) }),
+      S.kind === 'quest' && h(QuestSheet, { key: S.id, s, qId: S.id, onClose: () => setSheet({ kind: 'quests' }), complete: completeQuest }),
+      S.kind === 'shop' && h(ShopSheet, { s, onClose: close, buy, equip }),
+      S.kind === 'settings' && h(SettingsSheet, { onClose: close, teacher, setTeacher: (v) => { setTeacher(v); close(); }, minimal, setMinimal, reset }),
+      S.kind === 'ach' && h(Sheet, { onClose: close }, h('div', { className: 'h1', style: { marginBottom: 12 } }, 'Achievements'), h('div', { className: 'ach-grid' }, ACH.map((a) => h(Medal, { key: a.k, a, me: s.me })))),
+      S.kind === 'chest' && h(InfoSheet, { onClose: close, icon: h('div', { style: { fontSize: 72 } }, S.reward.icon), title: S.reward.label, body: 'From your Full homework chest.' }),
+      S.kind === 'locked' && h(InfoSheet, { onClose: close, icon: h(Crest, { tone: 'grey', icon: '🔒', size: 70, spikes: false }),
+        title: 'Unit ' + (d.currentUnit + 1) + ' is locked', body: 'It opens when your guild defeats ' + (d.liveBoss ? d.liveBoss.name : 'the boss') + '. Every homework in Unit ' + d.currentUnit + ' brings it closer.' }),
+      S.kind === 'mapinfo' && h(InfoSheet, { onClose: close, icon: h('div', { style: { fontSize: 56 } }, '🗺️'), title: 'Your journey',
+        body: 'Each unit is a region and each lesson\'s homework is a stop on the road. Your classmates move forward as they finish homework. Beat the unit boss together to unlock the next region.' }),
       h('div', { className: 'toasts', 'aria-live': 'polite' }, toasts.map((t) => h('div', { key: t.id, className: 'toast' }, h('span', { style: { fontSize: 18 } }, t.icon), h('span', null, t.text)))),
       boom && h('div', { className: 'boom', key: boom.k }, h('div', { className: cx('n', boom.crit && 'crit') }, '−' + boom.n), h('div', { className: 't', style: { color: boom.crit ? 'var(--gold)' : 'var(--text)' } }, boom.label)));
   };
