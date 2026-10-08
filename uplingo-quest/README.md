@@ -13,6 +13,8 @@ Open `index.html` in a browser, or serve the folder:
 python3 -m http.server 8765   # then open http://localhost:8765/
 ```
 
+`prototype.html` is the student-only version: the teacher switch is hidden, Ms. Nargiza checks each attack automatically a few seconds later, and a short guide opens on first visit. It is written for hosting as a page, without its own `<html>`/`<head>` wrapper.
+
 To switch to the teacher side, open **Profile → ⚙️ → Teacher view**. Progress is saved in your browser. Use **⚙️ → Reset demo** to start over.
 
 ### Try this flow

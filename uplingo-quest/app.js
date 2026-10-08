@@ -6,6 +6,10 @@
   const G = window.Game;
   const { Icon, Crest, Banner, Chest, Mountains, WorldTerrain, Emo, isAsset } = window.Art;
 
+  // The hosted student prototype sets window.UQ_STUDENT_ONLY: it hides the teacher view and
+  // simulates the teacher checking homework a few seconds after each attack.
+  const STUDENT_ONLY = !!window.UQ_STUDENT_ONLY;
+
   // ---------------------------------------------------------------- storage
   const STORE = 'uplingo-quest-v3';
   const loadState = () => {
@@ -642,14 +646,36 @@
         })));
   };
 
-  const SettingsSheet = ({ onClose, teacher, setTeacher, minimal, setMinimal, reset }) => h(Sheet, { onClose },
+  const SettingsSheet = ({ onClose, teacher, setTeacher, minimal, setMinimal, reset }) => {
+    const [sure, setSure] = useState(false);
+    return h(Sheet, { onClose },
     h('div', { className: 'h1', style: { marginBottom: 12 } }, 'Settings'),
     h('div', { className: 'list' },
-      h('div', { className: 'item' }, h('div', { className: 'grow' }, h('div', { className: 't' }, 'Teacher view (demo)'), h('div', { className: 's' }, 'Approve homework, run battles and bosses')),
+      !STUDENT_ONLY && h('div', { className: 'item' }, h('div', { className: 'grow' }, h('div', { className: 't' }, 'Teacher view (demo)'), h('div', { className: 's' }, 'Approve homework, run battles and bosses')),
         h('button', { className: cx('switch', teacher && 'on'), role: 'switch', 'aria-checked': teacher, 'aria-label': 'Teacher view', onClick: () => setTeacher(!teacher) }, h('span'))),
       h('div', { className: 'item' }, h('div', { className: 'grow' }, h('div', { className: 't' }, 'Minimal mode'), h('div', { className: 's' }, 'Progress and stats with less game decoration')),
         h('button', { className: cx('switch', minimal && 'on'), role: 'switch', 'aria-checked': minimal, 'aria-label': 'Minimal mode', onClick: () => setMinimal(!minimal) }, h('span')))),
-    h('button', { className: 'btn ghost block', style: { marginTop: 14 }, onClick: reset }, 'Reset demo'));
+    sure
+      ? h('div', { className: 'row', style: { marginTop: 14 } },
+        h('button', { className: 'btn ghost grow', onClick: () => setSure(false) }, 'Cancel'),
+        h('button', { className: 'btn gold grow', onClick: reset }, 'Yes, start over'))
+      : h('button', { className: 'btn ghost block', style: { marginTop: 14 }, onClick: () => setSure(true) }, 'Reset demo'));
+  };
+
+  const WelcomeSheet = ({ onClose }) => h(Sheet, { onClose },
+    h('div', { style: { display: 'flex', justifyContent: 'center', marginBottom: 6 } }, h(Crest, { tone: 'blue', crest: 'lion', size: 64 })),
+    h('div', { className: 'h1', style: { textAlign: 'center' } }, 'Welcome to UpLingo Quest'),
+    h('p', { className: 'muted', style: { textAlign: 'center', margin: '6px 0 14px' } }, 'You are Islom, a student in the Novza Lions. This week your group is battling the Chilonzor Dragons.'),
+    h('div', { className: 'list' },
+      [['list', 'Open Homework and finish your tasks. Mark each one and record the speaking task.'],
+        ['swords', 'Press Attack. Your damage waits until your teacher checks the work.'],
+        ['check', 'Ms. Nargiza checks it in a few seconds. The damage hits the Dragons and the unit boss.'],
+        ['gift', 'A Full homework earns a chest. Open it on your Profile and spend coins in the Shop.']]
+        .map(([ic, t], i) => h('div', { key: i, className: 'item' },
+          h('div', { className: 'ck', style: { background: 'var(--gold-soft)', color: 'var(--gold)', fontWeight: 800 } }, i + 1),
+          h('div', { className: 'grow', style: { fontSize: 13.5 } }, t)))),
+    h('div', { className: 'tiny muted', style: { textAlign: 'center', marginTop: 10 } }, 'This is a prototype with sample data. Your progress stays in this browser.'),
+    h('button', { className: 'btn gold block', style: { marginTop: 14 }, onClick: onClose }, 'Start'));
 
   // ---------------------------------------------------------------- teacher
   const TeacherVerify = ({ s, d, now, verify, returnSub }) => {
@@ -749,7 +775,7 @@
     const [now, setNow] = useState(Date.now());
     const [tab, setTab] = useState('home');
     const [ttab, setTtab] = useState('verify');
-    const [teacher, setTeacher] = useState(() => loadPref('uq-teacher', false));
+    const [teacher, setTeacher] = useState(() => !STUDENT_ONLY && loadPref('uq-teacher', false));
     const [minimal, setMinimal] = useState(() => loadPref('uq-minimal', false));
     const [battleOpen, setBattleOpen] = useState(false);
     const [hwSel, setHwSel] = useState(null);
@@ -765,6 +791,16 @@
     useEffect(() => savePref('uq-minimal', minimal), [minimal]);
     useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
     useEffect(() => { window.scrollTo(0, 0); }, [tab, ttab, teacher, battleOpen]);
+    // Student prototype: a short guide on first open, and teammates' pending work gets checked over time.
+    useEffect(() => {
+      if (!STUDENT_ONLY) return undefined;
+      if (!loadPref('uq-welcomed', false)) setSheet({ kind: 'welcome' });
+      const timers = [30000, 75000].map((ms) => setTimeout(() => {
+        const sub = sRef.current.submissions.find((x) => x.state === 'pending' && x.who !== sRef.current.me.id);
+        if (sub) verify(sub, sub.statuses.every((v) => v === 'Full') ? 3 : 2);
+      }, ms));
+      return () => timers.forEach(clearTimeout);
+    }, []);
 
     const d = useMemo(() => derive(s, now), [s, now]);
     const flash = (text, icon = '✨') => {
@@ -821,7 +857,14 @@
       });
       setFresh(id);
       pop(fortress, '⏳ Pending · lands when your teacher checks it');
-      flash('Attack sent! To approve it: Profile → ⚙️ → Teacher view.', '⚔️');
+      if (STUDENT_ONLY) {
+        flash('Attack sent! Ms. Nargiza will check your homework in a moment.', '⚔️');
+        setTimeout(() => flash('Ms. Nargiza is checking your homework…', '👀'), 3500);
+        setTimeout(() => {
+          const sub = sRef.current.submissions.find((x) => x.id === sid);
+          if (sub && sub.state === 'pending') verify(sub, est.allFull ? 3 : 2);
+        }, 8000);
+      } else flash('Attack sent! To approve it: Profile → ⚙️ → Teacher view.', '⚔️');
     };
     const completeQuest = (q) => {
       const rewarded = sRef.current.me.sideToday < G.SIDE_QUEST_DAILY_CAP;
@@ -913,7 +956,6 @@
       flash('Sent back to ' + sub.whoName + ' to improve — no damage this time', '↩️');
     };
     const reset = () => {
-      if (!window.confirm('Reset the demo to its starting state?')) return;
       setS(G.seed()); setTab('home'); setTeacher(false); setSheet(null); setBattleOpen(false);
       flash('Demo reset', '↺');
     };
@@ -966,6 +1008,7 @@
       S.kind === 'quests' && h(QuestLibrary, { s, onClose: close, openQuest: (id) => setSheet({ kind: 'quest', id }) }),
       S.kind === 'quest' && h(QuestSheet, { key: S.id, s, qId: S.id, onClose: () => setSheet({ kind: 'quests' }), complete: completeQuest }),
       S.kind === 'shop' && h(ShopSheet, { s, onClose: close, buy, equip }),
+      S.kind === 'welcome' && h(WelcomeSheet, { onClose: () => { savePref('uq-welcomed', true); close(); } }),
       S.kind === 'settings' && h(SettingsSheet, { onClose: close, teacher, setTeacher: (v) => { setTeacher(v); close(); }, minimal, setMinimal, reset }),
       S.kind === 'ach' && h(Sheet, { onClose: close }, h('div', { className: 'h1', style: { marginBottom: 12 } }, 'Achievements'), h('div', { className: 'ach-grid' }, ACH.map((a) => h(Medal, { key: a.k, a, me: s.me })))),
       S.kind === 'chest' && h(InfoSheet, { onClose: close, icon: h(Emo, { v: S.reward.icon, size: 96 }), title: S.reward.label, body: 'From your Full homework chest.' }),
