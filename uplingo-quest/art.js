@@ -41,7 +41,17 @@
     blue: ['#7CC0FF', '#2F80FF', '#0B3A9E'], red: ['#FF8A7A', '#E5383B', '#7E0D12'], gold: ['#FFE38A', '#F5B83D', '#9A5B05'],
     purple: ['#C4B1FF', '#8B5CF6', '#3D1D8F'], green: ['#86EFAC', '#22C55E', '#0F5B2C'], grey: ['#9AA4B5', '#5D6A86', '#2A3142'],
   };
-  const EMBLEM = { lion: '🦁', dragon: '🐉', wolf: '🐺', eagle: '🦅', bear: '🐻' };
+  // 3D artwork (Microsoft Fluent Emoji, MIT) lives in assets/3d as <key>.webp.
+  const A3D = (k) => 'assets/3d/' + k + '.webp';
+  const isAsset = (v) => typeof v === 'string' && /^[a-z][a-z_-]*$/.test(v);
+  // Renders a 3D asset key as an image, or falls back to plain text/emoji.
+  const Emo = ({ v, size = 24, style }) => isAsset(v)
+    ? h('img', { src: A3D(v), width: size, height: size, alt: '', draggable: false, decoding: 'async', style: { display: 'block', objectFit: 'contain', ...style } })
+    : h('span', { style: { fontSize: size * 0.9, lineHeight: 1, ...style } }, v);
+  const EMBLEM = { lion: 'lion', dragon: 'dragon', wolf: 'wolf', eagle: 'eagle', bear: 'bear' };
+  const Emblem = ({ v }) => isAsset(v)
+    ? h('image', { href: A3D(v), x: 21, y: 30, width: 58, height: 58, style: { filter: 'drop-shadow(0 3px 2px rgba(0,0,0,0.45))' } })
+    : h('text', { x: 50, y: 74, textAnchor: 'middle', fontSize: 44, style: { filter: 'drop-shadow(0 3px 2px rgba(0,0,0,0.45))' } }, v);
   let gid = 0;
   const SHIELD = 'M50 4 L93 17 V56 C93 86 73 104 50 116 C27 104 7 86 7 56 V17 Z';
   // A guild crest or an achievement medal: shield with metal rim and an emblem.
@@ -60,7 +70,7 @@
       h('path', { d: SHIELD, fill: 'url(#' + id + 'r)' }),
       h('path', { d: SHIELD, fill: 'url(#' + id + 'f)', transform: 'translate(50 60) scale(0.84) translate(-50 -60)' }),
       h('path', { d: 'M50 16 L82 26 V40 C60 36 40 46 18 58 V26 Z', fill: 'url(#' + id + 'g)', opacity: 0.6 }),
-      h('text', { x: 50, y: 74, textAnchor: 'middle', fontSize: 44, style: { filter: 'drop-shadow(0 3px 2px rgba(0,0,0,0.45))' } }, emoji));
+      h(Emblem, { v: emoji }));
   };
 
   // A hanging war banner with a crest (battle screen).
@@ -87,7 +97,7 @@
         h('radialGradient', { id: id + 'f', cx: 0.4, cy: 0.3, r: 0.85 }, h('stop', { offset: 0, stopColor: hi }), h('stop', { offset: 0.5, stopColor: mid }), h('stop', { offset: 1, stopColor: lo }))),
       h('path', { d: SHIELD, fill: 'url(#' + id + 'r)' }),
       h('path', { d: SHIELD, fill: 'url(#' + id + 'f)', transform: 'translate(50 60) scale(0.84) translate(-50 -60)' }),
-      h('text', { x: 50, y: 74, textAnchor: 'middle', fontSize: 44 }, EMBLEM[crest]));
+      h(Emblem, { v: EMBLEM[crest] }));
   };
 
   // ---------------------------------------------------------------- chest
@@ -123,6 +133,9 @@
   // ---------------------------------------------------------------- world map terrain
   const MAP_W = 390, MAP_H = 900;
   const LOCK_Y = 545;
+  // Optional painted background (e.g. 'assets/map/unit5.webp'). When set, it replaces the
+  // drawn terrain and trees; the road, stops, pins and locks still sit on top of it.
+  const MAP_BG = null;
   // Road from the castle (Unit 5 hub) down through lessons 1–5, then into locked land.
   const ROAD = [[40, -20], [62, 70], [112, 196], [160, 250], [205, 288], [172, 334], [200, 382], [246, 422], [286, 462], [290, 512], [240, 584], [172, 640], [150, 700], [205, 770], [252, 836], [240, 920]];
   const LESSON_PTS = [[205, 288], [172, 334], [200, 382], [246, 422], [286, 462]];
@@ -148,98 +161,130 @@
     return out;
   };
   const rng = (seed) => () => { seed |= 0; seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-  const TREES = (() => {
-    const r = rng(11), road = densify(ROAD), river = densify(RIVER), out = [];
-    const clear = [[112, 180, 62], [250, 690, 62], [300, 215, 0]];
-    for (let i = 0; i < 420 && out.length < 230; i++) {
-      const x = r() * MAP_W, y = r() * MAP_H;
-      if (road.some(([a, b]) => Math.hypot(a - x, b - y) < 24)) continue;
-      if (river.some(([a, b]) => Math.hypot(a - x, b - y) < 22)) continue;
+  const SCATTER = (() => {
+    const r = rng(11), road = densify(ROAD), river = densify(RIVER), trees = [], rocks = [], flowers = [];
+    const clear = [[112, 175, 64], [252, 690, 66]];
+    const near = (pts, x, y, d) => pts.some(([a, b]) => Math.hypot(a - x, b - y) < d);
+    for (let i = 0; i < 1400 && trees.length < 165; i++) {
+      const x = r() * (MAP_W + 20) - 10, y = r() * (MAP_H + 20) - 10;
+      if (near(road, x, y, 26) || near(river, x, y, 24)) continue;
       if (clear.some(([a, b, rad]) => Math.hypot(a - x, b - y) < rad)) continue;
-      if (out.some((t) => Math.hypot(t.x - x, t.y - y) < 13)) continue;
-      out.push({ x, y, s: 0.8 + r() * 0.6, pine: r() < 0.6 });
+      // Trees grow in clumps: favour spots near an existing tree.
+      const nb = trees.filter((t) => Math.hypot(t.x - x, t.y - y) < 40).length;
+      if (trees.length > 18 && nb === 0 && r() < 0.88) continue;
+      // Keep open meadows on both sides of the road in the sunny part of the map.
+      if (y < LOCK_Y && near(road, x, y, 46) && r() < 0.7) continue;
+      if (trees.some((t) => Math.hypot(t.x - x, t.y - y) < 14)) continue;
+      trees.push({ x, y, s: 0.75 + r() * 0.6, pine: r() < 0.55, flip: r() < 0.5 });
     }
-    return out.sort((a, b) => a.y - b.y);
+    for (let i = 0; i < 300 && rocks.length < 22; i++) {
+      const x = r() * MAP_W, y = r() * MAP_H;
+      if (near(road, x, y, 16) || near(river, x, y, 20) || trees.some((t) => Math.hypot(t.x - x, t.y - y) < 14)) continue;
+      rocks.push({ x, y, s: 0.6 + r() * 0.8 });
+    }
+    for (let i = 0; i < 600 && flowers.length < 70; i++) {
+      const x = r() * MAP_W, y = r() * (LOCK_Y - 20);
+      if (near(road, x, y, 14) || near(river, x, y, 18)) continue;
+      flowers.push({ x, y, c: ['#FFE066', '#FFFFFF', '#FF9EC7', '#C9A6FF'][Math.floor(r() * 4)] });
+    }
+    return { trees: trees.sort((a, b) => a.y - b.y), rocks, flowers };
   })();
 
   const Tree = ({ t }) => {
-    const dead = t.y > LOCK_Y;
-    const dark = dead ? '#2B3A36' : '#17452A', mid = dead ? '#3A4A45' : '#23603A', lit = dead ? '#4A5953' : '#3C8A4A';
-    const { x, y, s } = t;
-    if (t.pine) {
-      return h('g', { transform: `translate(${x} ${y}) scale(${s})` },
-        h('ellipse', { cx: 2, cy: 1, rx: 9, ry: 3, fill: '#000', opacity: 0.25 }),
-        h('rect', { x: -1.5, y: -4, width: 3, height: 5, fill: '#4A3220' }),
-        h('polygon', { points: '0,-26 -10,-4 10,-4', fill: dark }),
-        h('polygon', { points: '0,-26 0,-4 10,-4', fill: mid }),
-        h('polygon', { points: '0,-32 -7,-15 7,-15', fill: mid }),
-        h('polygon', { points: '0,-32 -7,-15 -1,-15', fill: lit }));
-    }
-    return h('g', { transform: `translate(${x} ${y}) scale(${s})` },
-      h('ellipse', { cx: 2, cy: 1, rx: 9, ry: 3, fill: '#000', opacity: 0.25 }),
-      h('rect', { x: -1.5, y: -6, width: 3, height: 7, fill: '#4A3220' }),
-      h('circle', { cx: 0, cy: -13, r: 9, fill: dark }),
-      h('circle', { cx: -2.5, cy: -15.5, r: 5.5, fill: mid }),
-      h('circle', { cx: -4, cy: -17, r: 2.5, fill: lit }));
+    const dark = t.y > LOCK_Y;
+    const w = (t.pine ? 30 : 34) * t.s;
+    const key = (t.pine ? 'evergreen' : 'deciduous') + (dark ? '_dark' : '');
+    return h('g', null,
+      h('ellipse', { cx: t.x + w * 0.12, cy: t.y + 1, rx: w * 0.38, ry: w * 0.12, fill: '#0B1A0E', opacity: dark ? 0.35 : 0.32 }),
+      h('image', { href: A3D(key), x: t.x - w / 2, y: t.y - w * 0.95, width: w, height: w, transform: t.flip ? `translate(${2 * t.x} 0) scale(-1 1)` : undefined }));
   };
-
-  const Castle = ({ x, y, dark }) => {
-    const wall = dark ? '#2A3140' : '#E6D8BC', wallS = dark ? '#1B202B' : '#B9A783', roof = dark ? '#1B202B' : '#2F64D8', roofL = dark ? '#262C39' : '#5A8DFF';
-    const tower = (tx, ty, w, hh) => h('g', null,
-      h('rect', { x: tx, y: ty, width: w, height: hh, fill: wall, stroke: wallS, strokeWidth: 1 }),
-      h('rect', { x: tx + w / 2 - 2, y: ty + 10, width: 4, height: 7, rx: 2, fill: dark ? '#4B1D1D' : '#3A2A1A' }),
-      h('polygon', { points: `${tx - 3},${ty} ${tx + w / 2},${ty - w * 1.1} ${tx + w + 3},${ty}`, fill: roof }),
-      h('polygon', { points: `${tx + w / 2},${ty - w * 1.1} ${tx + w + 3},${ty} ${tx + w / 2},${ty}`, fill: roofL, opacity: 0.6 }));
-    return h('g', { transform: `translate(${x - 55} ${y - 70})` },
-      h('ellipse', { cx: 55, cy: 92, rx: 56, ry: 10, fill: '#000', opacity: 0.35 }),
-      h('rect', { x: 14, y: 52, width: 82, height: 38, fill: wall, stroke: wallS, strokeWidth: 1 }),
-      Array.from({ length: 9 }, (_, i) => h('rect', { key: i, x: 15 + i * 9, y: 47, width: 6, height: 6, fill: wall, stroke: wallS, strokeWidth: 0.8 })),
-      h('path', { d: 'M46 90 V74 a9 9 0 0 1 18 0 V90 Z', fill: dark ? '#120E14' : '#4A3220' }),
-      tower(4, 40, 18, 50), tower(88, 40, 18, 50), tower(44, 18, 22, 40),
-      !dark && h('g', null,
-        h('line', { x1: 55, y1: -6, x2: 55, y2: -26, stroke: '#8B7B5E', strokeWidth: 1.5 }),
-        h('path', { d: 'M55 -26 L74 -21 L55 -15 Z', fill: '#2F80FF', stroke: '#F5B83D', strokeWidth: 1 })),
-      dark && h('g', null, [[12, 62], [96, 62], [53, 30]].map(([wx, wy], i) => h('rect', { key: i, x: wx, y: wy, width: 3, height: 5, fill: '#FF4D4D', opacity: 0.7 }))));
-  };
+  const Rock = ({ k }) => h('g', { transform: `translate(${k.x} ${k.y}) scale(${k.s})` },
+    h('ellipse', { cx: 1, cy: 2, rx: 7, ry: 2.5, fill: '#000', opacity: 0.25 }),
+    h('path', { d: 'M-7 1 Q-6 -6 0 -7 Q6 -6 7 1 Z', fill: k.y > LOCK_Y ? '#4A4F5A' : '#9AA0A6' }),
+    h('path', { d: 'M-5 -2 Q-3 -6 1 -6 Q-2 -3 -5 -2 Z', fill: '#fff', opacity: 0.35 }));
 
   const Coin = ({ x, y, state }) => {
     const c = state === 'done' ? ['#FFE38A', '#E0A42B', '#8C5A0B'] : state === 'current' ? ['#FFF1B8', '#F5B83D', '#A86A08'] : ['#E9DDB8', '#BFAE7E', '#6E6247'];
     return h('g', null,
-      h('ellipse', { cx: x, cy: y + 4, rx: 15, ry: 9, fill: '#000', opacity: 0.3 }),
-      h('ellipse', { cx: x, cy: y + 2, rx: 15, ry: 9.5, fill: c[2] }),
+      h('ellipse', { cx: x + 2, cy: y + 6, rx: 16, ry: 8, fill: '#000', opacity: 0.35 }),
+      h('ellipse', { cx: x, cy: y + 3, rx: 15, ry: 9.5, fill: c[2] }),
       h('ellipse', { cx: x, cy: y, rx: 15, ry: 9.5, fill: c[1] }),
-      h('ellipse', { cx: x, cy: y - 1, rx: 10, ry: 5.5, fill: c[0], opacity: 0.7 }),
+      h('ellipse', { cx: x - 1, cy: y - 1.5, rx: 10, ry: 5.5, fill: c[0], opacity: 0.75 }),
+      state === 'done' && h('path', { d: `M${x - 5} ${y} l3.5 3 l6 -6`, stroke: '#6B4306', strokeWidth: 2.2, fill: 'none', strokeLinecap: 'round', strokeLinejoin: 'round' }),
       state === 'current' && h('ellipse', { cx: x, cy: y, rx: 21, ry: 13.5, fill: 'none', stroke: '#FFD978', strokeWidth: 2, opacity: 0.8 }, h('animate', { attributeName: 'opacity', values: '0.9;0.2;0.9', dur: '1.8s', repeatCount: 'indefinite' })));
   };
 
+  const Drift = ({ children, dx, dur, delay = 0 }) => h('g', null,
+    h('animateTransform', { attributeName: 'transform', type: 'translate', values: `0 0; ${dx} 0; 0 0`, dur: dur + 's', begin: delay + 's', repeatCount: 'indefinite' }), children);
+
   // `states[i]` is 'done' | 'current' | 'todo' for each lesson point.
-  const WorldTerrain = ({ states, bossAlive }) => {
-    const fogTop = LOCK_Y - 30;
+  const WorldTerrain = React.memo(({ states, bossAlive }) => {
+    const fogTop = LOCK_Y - 40;
     return h('svg', { className: 'terrain', viewBox: `0 0 ${MAP_W} ${MAP_H}`, 'aria-hidden': true },
       h('defs', null,
-        h('linearGradient', { id: 'grass', x1: 0, y1: 0, x2: 0, y2: 1 }, h('stop', { offset: 0, stopColor: '#4E8A3E' }), h('stop', { offset: 0.55, stopColor: '#3D7436' }), h('stop', { offset: 0.62, stopColor: '#3A4A44' }), h('stop', { offset: 1, stopColor: '#262E30' })),
-        h('radialGradient', { id: 'meadow', cx: 0.5, cy: 0.5, r: 0.5 }, h('stop', { offset: 0, stopColor: '#8CC063', stopOpacity: 0.55 }), h('stop', { offset: 1, stopColor: '#8CC063', stopOpacity: 0 })),
-        h('linearGradient', { id: 'fog', x1: 0, y1: 0, x2: 0, y2: 1 }, h('stop', { offset: 0, stopColor: '#0B1220', stopOpacity: 0 }), h('stop', { offset: 0.18, stopColor: '#0B1220', stopOpacity: 0.55 }), h('stop', { offset: 1, stopColor: '#0B1220', stopOpacity: 0.78 })),
-        h('linearGradient', { id: 'riv', x1: 0, y1: 0, x2: 0, y2: 1 }, h('stop', { offset: 0, stopColor: '#3B9BE8' }), h('stop', { offset: 0.6, stopColor: '#2B7CC4' }), h('stop', { offset: 1, stopColor: '#3E5A6E' }))),
-      h('rect', { width: MAP_W, height: MAP_H, fill: 'url(#grass)' }),
-      [[90, 120, 90], [240, 260, 110], [120, 420, 100], [60, 300, 70], [260, 120, 80]].map(([cx, cy, r], i) => h('circle', { key: i, cx, cy, r, fill: 'url(#meadow)' })),
-      // River with banks and shimmer.
-      h('path', { d: smooth(RIVER), fill: 'none', stroke: '#6E5A3A', strokeWidth: 32, strokeLinecap: 'round', opacity: 0.5 }),
-      h('path', { d: smooth(RIVER), fill: 'none', stroke: 'url(#riv)', strokeWidth: 24, strokeLinecap: 'round' }),
-      h('path', { d: smooth(RIVER), fill: 'none', stroke: '#8FD0FF', strokeWidth: 2, strokeDasharray: '6 18', strokeLinecap: 'round', opacity: 0.7 },
-        h('animate', { attributeName: 'stroke-dashoffset', from: 0, to: -48, dur: '3s', repeatCount: 'indefinite' })),
-      // Road.
-      h('path', { d: smooth(ROAD), fill: 'none', stroke: '#6B4E25', strokeWidth: 17, strokeLinecap: 'round', strokeLinejoin: 'round', opacity: 0.85 }),
-      h('path', { d: smooth(ROAD), fill: 'none', stroke: '#D7B46A', strokeWidth: 12, strokeLinecap: 'round', strokeLinejoin: 'round' }),
-      h('path', { d: smooth(ROAD), fill: 'none', stroke: '#F1D893', strokeWidth: 2, strokeDasharray: '2 9', strokeLinecap: 'round', opacity: 0.9 }),
-      TREES.map((t, i) => h(Tree, { key: i, t })),
-      h(Castle, { x: 112, y: 196 }),
+        h('linearGradient', { id: 'grass', x1: 0, y1: 0, x2: 0, y2: 1 }, h('stop', { offset: 0, stopColor: '#5E9A45' }), h('stop', { offset: 0.35, stopColor: '#4C8A3C' }), h('stop', { offset: 0.56, stopColor: '#3F7536' }), h('stop', { offset: 0.66, stopColor: '#3B4A43' }), h('stop', { offset: 1, stopColor: '#232A2E' })),
+        // Large soft patches (light and dark meadow) plus fine grain, so the grass doesn't look flat.
+        h('filter', { id: 'patches', x: 0, y: 0, width: 1, height: 1 },
+          h('feTurbulence', { type: 'fractalNoise', baseFrequency: '0.012 0.016', numOctaves: 3, seed: 4 }),
+          h('feColorMatrix', { type: 'matrix', values: '0 0 0 0 0.55  0 0 0 0 0.78  0 0 0 0 0.3  0 0 0 1.6 -0.75' })),
+        h('filter', { id: 'darkpatches', x: 0, y: 0, width: 1, height: 1 },
+          h('feTurbulence', { type: 'fractalNoise', baseFrequency: '0.02', numOctaves: 3, seed: 9 }),
+          h('feColorMatrix', { type: 'matrix', values: '0 0 0 0 0.08  0 0 0 0 0.2  0 0 0 0 0.06  0 0 0 1.8 -0.85' })),
+        h('filter', { id: 'grain', x: 0, y: 0, width: 1, height: 1 },
+          h('feTurbulence', { type: 'fractalNoise', baseFrequency: 0.9, numOctaves: 2, seed: 2 }),
+          h('feColorMatrix', { type: 'matrix', values: '0 0 0 0 0  0 0 0 0 0.1  0 0 0 0 0  0 0 0 0.35 0' })),
+        h('filter', { id: 'blur8' }, h('feGaussianBlur', { stdDeviation: 8 })),
+        h('filter', { id: 'blur3' }, h('feGaussianBlur', { stdDeviation: 2.5 })),
+        h('radialGradient', { id: 'sun', cx: 0.15, cy: 0.05, r: 0.8 }, h('stop', { offset: 0, stopColor: '#FFE9A8', stopOpacity: 0.35 }), h('stop', { offset: 0.6, stopColor: '#FFE9A8', stopOpacity: 0 })),
+        h('radialGradient', { id: 'vignette', cx: 0.5, cy: 0.4, r: 0.75 }, h('stop', { offset: 0.6, stopColor: '#000', stopOpacity: 0 }), h('stop', { offset: 1, stopColor: '#000', stopOpacity: 0.45 })),
+        h('linearGradient', { id: 'fog', x1: 0, y1: 0, x2: 0, y2: 1 }, h('stop', { offset: 0, stopColor: '#141A2A', stopOpacity: 0 }), h('stop', { offset: 0.2, stopColor: '#141A2A', stopOpacity: 0.45 }), h('stop', { offset: 1, stopColor: '#0B1220', stopOpacity: 0.72 })),
+        h('linearGradient', { id: 'riv', x1: 0, y1: 0, x2: 0, y2: 1 }, h('stop', { offset: 0, stopColor: '#3FA4EE' }), h('stop', { offset: 0.55, stopColor: '#2A7FC8' }), h('stop', { offset: 0.7, stopColor: '#2F5570' }), h('stop', { offset: 1, stopColor: '#26394A' }))),
+
+      MAP_BG
+        ? h('image', { href: MAP_BG, x: 0, y: 0, width: MAP_W, height: MAP_H, preserveAspectRatio: 'xMidYMid slice' })
+        : h('g', null,
+          h('rect', { width: MAP_W, height: MAP_H, fill: 'url(#grass)' }),
+          h('rect', { width: MAP_W, height: LOCK_Y + 40, filter: 'url(#patches)', opacity: 0.55 }),
+          h('rect', { width: MAP_W, height: MAP_H, filter: 'url(#darkpatches)', opacity: 0.6 }),
+          h('rect', { width: MAP_W, height: MAP_H, filter: 'url(#grain)' }),
+          SCATTER.flowers.map((f, i) => h('circle', { key: i, cx: f.x, cy: f.y, r: 1.3, fill: f.c, opacity: 0.85 })),
+          // River: sandy banks, deep water, darker centre line and moving glints.
+          h('path', { d: smooth(RIVER), fill: 'none', stroke: '#C8AE74', strokeWidth: 36, strokeLinecap: 'round', opacity: 0.85 }),
+          h('path', { d: smooth(RIVER), fill: 'none', stroke: '#8E7A4C', strokeWidth: 30, strokeLinecap: 'round', opacity: 0.5, filter: 'url(#blur3)' }),
+          h('path', { d: smooth(RIVER), fill: 'none', stroke: 'url(#riv)', strokeWidth: 25, strokeLinecap: 'round' }),
+          h('path', { d: smooth(RIVER), fill: 'none', stroke: '#1C5E9E', strokeWidth: 9, strokeLinecap: 'round', opacity: 0.5, filter: 'url(#blur3)' }),
+          h('path', { d: smooth(RIVER), fill: 'none', stroke: '#BFE6FF', strokeWidth: 1.6, strokeDasharray: '5 22', strokeLinecap: 'round', opacity: 0.85, transform: 'translate(-5 0)' },
+            h('animate', { attributeName: 'stroke-dashoffset', from: 0, to: -54, dur: '3.2s', repeatCount: 'indefinite' })),
+          h('path', { d: smooth(RIVER), fill: 'none', stroke: '#BFE6FF', strokeWidth: 1.2, strokeDasharray: '3 30', strokeLinecap: 'round', opacity: 0.6, transform: 'translate(5 0)' },
+            h('animate', { attributeName: 'stroke-dashoffset', from: 0, to: -66, dur: '4.4s', repeatCount: 'indefinite' }))),
+
+      // Road: shadow edge, dirt, worn centre and pebbles.
+      h('path', { d: smooth(ROAD), fill: 'none', stroke: '#3F2C12', strokeWidth: 19, strokeLinecap: 'round', strokeLinejoin: 'round', opacity: 0.55, filter: 'url(#blur3)' }),
+      h('path', { d: smooth(ROAD), fill: 'none', stroke: '#9C7A44', strokeWidth: 15, strokeLinecap: 'round', strokeLinejoin: 'round' }),
+      h('path', { d: smooth(ROAD), fill: 'none', stroke: '#D9B878', strokeWidth: 10, strokeLinecap: 'round', strokeLinejoin: 'round' }),
+      h('path', { d: smooth(ROAD), fill: 'none', stroke: '#EED7A0', strokeWidth: 3, strokeLinecap: 'round', opacity: 0.6 }),
+      h('path', { d: smooth(ROAD), fill: 'none', stroke: '#8A6A35', strokeWidth: 2, strokeDasharray: '1 13', strokeLinecap: 'round', opacity: 0.8, transform: 'translate(3 2)' }),
+
+      !MAP_BG && SCATTER.rocks.map((k, i) => h(Rock, { key: i, k })),
+      // Castle (Unit hub) and trees, depth-sorted so nearer things overlap farther ones.
+      h('ellipse', { cx: 114, cy: 214, rx: 58, ry: 12, fill: '#0B1A0E', opacity: 0.4 }),
+      h('image', { href: A3D('castle'), x: 52, y: 100, width: 124, height: 124 }),
+      !MAP_BG && SCATTER.trees.map((t, i) => h(Tree, { key: i, t })),
+      // Sunlight from the top left, cloud shadows drifting over the land, vignette.
+      h('rect', { width: MAP_W, height: MAP_H, fill: 'url(#sun)' }),
+      h(Drift, { dx: 60, dur: 38 }, h('ellipse', { cx: 120, cy: 300, rx: 90, ry: 40, fill: '#0B1A0E', opacity: 0.18, filter: 'url(#blur8)' })),
+      h(Drift, { dx: -50, dur: 46, delay: 4 }, h('ellipse', { cx: 300, cy: 120, rx: 70, ry: 30, fill: '#0B1A0E', opacity: 0.16, filter: 'url(#blur8)' })),
+      // Cursed land: fog bank, dark fortress, drifting mist.
       h('rect', { x: 0, y: fogTop, width: MAP_W, height: MAP_H - fogTop, fill: 'url(#fog)' }),
-      h(Castle, { x: 252, y: 700, dark: true }),
+      h('ellipse', { cx: 252, cy: 744, rx: 70, ry: 12, fill: '#000', opacity: 0.45 }),
+      h('image', { href: A3D('castle_dark'), x: 186, y: 632, width: 132, height: 132 }),
+      h(Drift, { dx: 70, dur: 26 }, h('ellipse', { cx: 120, cy: 620, rx: 140, ry: 26, fill: '#6B6E8A', opacity: 0.22, filter: 'url(#blur8)' })),
+      h(Drift, { dx: -80, dur: 32, delay: 3 }, h('ellipse', { cx: 300, cy: 790, rx: 150, ry: 30, fill: '#6B6E8A', opacity: 0.2, filter: 'url(#blur8)' })),
+      h('rect', { width: MAP_W, height: MAP_H, fill: 'url(#vignette)' }),
       LESSON_PTS.map(([x, y], i) => h(Coin, { key: i, x, y, state: states[i] })),
       bossAlive && h('circle', { cx: BOSS_PT[0], cy: BOSS_PT[1], r: 22, fill: '#8B5CF6', opacity: 0.35 },
         h('animate', { attributeName: 'r', values: '20;26;20', dur: '2.2s', repeatCount: 'indefinite' })));
-  };
+  }, (a, b) => a.bossAlive === b.bossAlive && a.states.join() === b.states.join());
 
-  window.Art = { Icon, Crest, Banner, Chest, Mountains, WorldTerrain, MAP_W, MAP_H, LESSON_PTS, BOSS_PT, LOCK_PTS, TONES };
+  window.Art = { Icon, Crest, Banner, Chest, Mountains, WorldTerrain, Emo, A3D, isAsset, MAP_W, MAP_H, LESSON_PTS, BOSS_PT, LOCK_PTS, TONES };
 })();

@@ -5,7 +5,7 @@ The game version of [UpLingo](https://github.com/islom008/UpLingo), built from t
 **Same purpose:** teachers assign homework, students self-mark each task (Not full / 50% / 75% / Full), and teachers check the work.
 **Different view:** the course is an illustrated world map, each group is a guild (Novza Lions vs Chilonzor Dragons), and approved homework is the only weapon that wins.
 
-The look follows the navy-and-gold mockup: five tabs (Home, Map, Homework, Guild, Profile), Lion and Dragon crests, war banners on the battle screen, a fantasy map with a castle, a river, forest and a locked dark region. Every illustration is inline SVG drawn in `art.js`, so there are no image files to host.
+The look follows the navy-and-gold mockup: five tabs (Home, Map, Homework, Guild, Profile), Lion and Dragon crests, war banners on the battle screen, a fantasy map with a castle, a river, forest and a locked dark region. Characters, emblems, the castle and trees are 3D images; the rest is drawn in code.
 
 Open `index.html` in a browser, or serve the folder:
 
@@ -42,7 +42,8 @@ Both apps use the same stack: React from a CDN with no build step. Quest uses it
 ## Files
 
 - `game.js` holds the game rules as pure functions (damage, shield, guild-size fairness, levels, ranks) and the demo data. It has no UI code, so the rules can move into a Supabase RPC or edge function unchanged.
-- `art.js` draws every illustration as inline SVG: icons, guild crests and medals, war banners, the world map, the homework hero art and the chest.
+- `art.js` draws the crests, banners, map terrain, hero art and chest, and places the 3D images.
+- `assets/3d/` holds the 3D artwork (faces, animals, castle, trees, items) from [Microsoft Fluent Emoji](https://github.com/microsoft/fluentui-emoji), MIT licence (`assets/3d/LICENSE-fluentui-emoji.txt`). They are WebP files, about 650 KB in total.
 - `app.js` is the UI: Home, Map, Homework, Guild and Profile tabs, the battle screen, sheets (tasks, rules, quests, shop, settings), and the teacher screens.
 - `index.html` contains the styles and script tags.
 
@@ -56,3 +57,13 @@ This is a front-end prototype with demo data. Recording is simulated, and the ot
 - `bosses` (group, unit, name, hp, deadline)
 - `side_quests` / `side_quest_completions`, plus `wallets` (xp, coins, season_pts) and `inventory`
 - Supabase Realtime on `attacks` for the live feed and HP bars
+
+## Using a painted map
+
+The map is built from layers: textured grass, a river, 3D trees and castles, cloud shadows and fog. To use a painted or AI-generated background instead:
+
+1. Save it as `assets/map/unit5.webp`, portrait, about 780 × 1800 px.
+2. In `art.js`, set `const MAP_BG = 'assets/map/unit5.webp';`.
+
+The drawn terrain and trees switch off, and the road, lesson stops, pins, boss and locks still sit on top. If the painting has its own road, move the points in `ROAD`, `LESSON_PTS`, `BOSS_PT` and `LOCK_PTS` (same file) to match. They use a 390 × 900 grid.
+

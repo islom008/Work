@@ -88,7 +88,8 @@
   // Result English School · Upper Intermediate · Novza Lions vs Chilonzor Dragons.
   const seed = (now = Date.now()) => {
     const H = (h) => now + h * HOUR;
-    const FACES = ['👨🏻', '👩🏻', '🧔🏻', '👱🏻‍♂️', '👩🏻‍🦱', '👨🏽', '👩🏽', '🧑🏻‍🦱', '👱🏻‍♀️', '👨🏻‍🦰', '👩🏼', '🧑🏽'];
+    // 3D portraits from Microsoft's Fluent Emoji (assets/3d, MIT licence).
+    const FACES = ['face_man_beard_medium-light', 'face_woman_with_headscarf_light', 'face_person_beard_medium', 'face_boy_medium-light', 'face_woman_curly_hair_light', 'face_man_medium', 'face_woman_medium-light', 'face_man_curly_hair_light', 'face_girl_medium-light', 'face_man_red_hair_light', 'face_woman_light', 'face_man_light', 'face_woman_red_hair_light', 'face_person_curly_hair_medium', 'face_girl_light', 'face_man_medium-light'];
     const P = (name, i, extra = {}) => ({ id: name.toLowerCase().replace(/[^a-z]/g, ''), name, face: FACES[i % FACES.length], ...extra });
 
     // week = damage landed in this battle so far (before this session).
@@ -105,7 +106,7 @@
     };
     const enemy = {
       id: 'chilonzor', name: 'Chilonzor Dragons', crest: 'dragon', side: 'red', teacher: 'Mr. Timur', level: 'Upper Intermediate',
-      members: ['Timur', 'Kamila', 'Rustam', 'Nilufar', 'Shahzod', 'Zarina', 'Jasur', 'Laylo', 'Bobur', 'Feruza', 'Gulnora', 'Ulugbek'].map((n, i) => P(n, i + 3)),
+      members: ['Timur', 'Kamila', 'Rustam', 'Nilufar', 'Shahzod', 'Zarina', 'Jasur', 'Laylo', 'Bobur', 'Feruza', 'Gulnora', 'Ulugbek'].map((n, i) => P(n, i + 4)),
       attackers: ['timur', 'kamila', 'rustam', 'nilufar', 'shahzod', 'zarina', 'jasur', 'laylo'],
     };
     const otherGroups = [
@@ -136,10 +137,10 @@
     ];
 
     const bosses = [
-      { unit: 4, name: 'The Mind Mirage', icon: '👁️', hp: 2400, dealt: 2400, deadline: H(-24 * 8), defeated: true },
-      { unit: 5, name: 'The Conditional Colossus', icon: '🗿', hp: BOSS_HP_PER_MEMBER * myGuild.members.length, dealt: 1380, deadline: H(24 * 8),
+      { unit: 4, name: 'The Mind Mirage', icon: 'eye', hp: 2400, dealt: 2400, deadline: H(-24 * 8), defeated: true },
+      { unit: 5, name: 'The Conditional Colossus', icon: 'moai', hp: BOSS_HP_PER_MEMBER * myGuild.members.length, dealt: 1380, deadline: H(24 * 8),
         contrib: { sardor: 310, malika: 260, islom: 190, aziz: 170, robiya: 150, kamron: 130, dilnoza: 90, javohir: 80 } },
-      { unit: 6, name: 'The Money Minotaur', icon: '🐂', hp: 2400, dealt: 0, deadline: H(24 * 16) },
+      { unit: 6, name: 'The Money Minotaur', icon: 'ox', hp: 2400, dealt: 0, deadline: H(24 * 16) },
     ];
 
     // Feed items carry the fortress damage that actually landed.
@@ -165,44 +166,44 @@
     ];
 
     const sideQuests = [
-      { id: 'q1', kind: 'video', icon: '🎬', color: '#E5383B', level: 'Upper Intermediate', title: 'Job interview: do\'s and don\'ts', mins: 4, coins: 5, xp: 15, assigned: true,
+      { id: 'q1', kind: 'video', icon: 'clapper', color: '#E5383B', level: 'Upper Intermediate', title: 'Job interview: do\'s and don\'ts', mins: 4, coins: 5, xp: 15, assigned: true,
         body: 'A recruiter explains what makes a strong answer in a job interview — and the three mistakes she hears most often.',
         check: [
           { q: 'What should a strong answer include?', opts: ['A real example', 'Only adjectives', 'A joke'], a: 0 },
           { q: '"I\'d be a good fit because…" uses which form?', opts: ['Past simple', 'Would + verb', 'Present perfect'], a: 1 },
           { q: 'One common mistake is…', opts: ['Asking questions', 'Speaking badly of an old boss', 'Arriving early'], a: 1 },
         ] },
-      { id: 'q2', kind: 'article', icon: '📰', color: '#2F80FF', level: 'Upper Intermediate', title: 'The four-day work week', mins: 3, coins: 5, xp: 10, timed: 60,
+      { id: 'q2', kind: 'article', icon: 'newspaper', color: '#2F80FF', level: 'Upper Intermediate', title: 'The four-day work week', mins: 3, coins: 5, xp: 10, timed: 60,
         body: 'When a software company in Tashkent cut its week to four days, managers expected output to fall. Instead, it rose by eight percent. Staff took fewer sick days, and the company found it easier to hire. Critics say the model only works where tasks can be measured clearly, and that customer-facing teams still need cover on the fifth day.',
         check: [
           { q: 'What happened to output?', opts: ['It fell', 'It rose by 8%', 'It stayed the same'], a: 1 },
           { q: 'Hiring became…', opts: ['easier', 'harder', 'impossible'], a: 0 },
           { q: 'Critics say the model needs…', opts: ['more managers', 'clearly measurable tasks', 'longer days'], a: 1 },
         ] },
-      { id: 'q3', kind: 'shadowing', icon: '🎙️', color: '#22C55E', level: 'Upper Intermediate', title: 'Shadow: introducing yourself at work', mins: 5, coins: 5, xp: 20,
+      { id: 'q3', kind: 'shadowing', icon: 'mic', color: '#22C55E', level: 'Upper Intermediate', title: 'Shadow: introducing yourself at work', mins: 5, coins: 5, xp: 20,
         body: 'Listen to each line, then say it at the same speed and rhythm. Record yourself reading all five lines.',
         lines: ['Hi, I\'m Islom — I\'ve just joined the marketing team.', 'I\'ve been working in sales for about two years.', 'If you need anything, just let me know.', 'I\'d love to hear how your team works.', 'Shall we grab a coffee later?'] },
-      { id: 'q4', kind: 'flashcards', icon: '🃏', color: '#8B5CF6', level: 'Upper Intermediate', title: 'Unit 5 words', mins: 3, coins: 5, xp: 10, assigned: true,
+      { id: 'q4', kind: 'flashcards', icon: 'cards', color: '#8B5CF6', level: 'Upper Intermediate', title: 'Unit 5 words', mins: 3, coins: 5, xp: 10, assigned: true,
         cards: [['promotion', 'a move to a higher job'], ['deadline', 'the latest time to finish'], ['colleague', 'a person you work with'], ['salary', 'money paid for work, usually monthly'], ['resign', 'to leave your job by choice'], ['workload', 'the amount of work you have']] },
     ];
 
     const shop = [
-      { id: 'av-me', kind: 'avatar', icon: '🧑🏻‍🦱', name: 'Classic', price: 0 },
-      { id: 'av-owl', kind: 'avatar', icon: '🦉', name: 'Owl Scholar', price: 150 },
-      { id: 'av-lion', kind: 'avatar', icon: '🦁', name: 'Lion Guard', price: 180 },
-      { id: 'av-sage', kind: 'avatar', icon: '🧙', name: 'Sage', price: 220 },
-      { id: 'av-mech', kind: 'avatar', icon: '🤖', name: 'Mech Pilot', price: 250 },
-      { id: 'av-dragon', kind: 'avatar', icon: '🐉', name: 'Dragon', price: 300 },
+      { id: 'av-me', kind: 'avatar', icon: 'face_man_curly_hair_light', name: 'Classic', price: 0 },
+      { id: 'av-owl', kind: 'avatar', icon: 'owl', name: 'Owl Scholar', price: 150 },
+      { id: 'av-lion', kind: 'avatar', icon: 'lion', name: 'Lion Guard', price: 180 },
+      { id: 'av-sage', kind: 'avatar', icon: 'face_man_mage_light', name: 'Sage', price: 220 },
+      { id: 'av-mech', kind: 'avatar', icon: 'robot', name: 'Mech Pilot', price: 250 },
+      { id: 'av-dragon', kind: 'avatar', icon: 'dragon', name: 'Dragon', price: 300 },
       { id: 'fr-blue', kind: 'frame', name: 'Royal Blue', price: 0, css: 'linear-gradient(135deg, #5AA2FF, #1E4FD8)' },
       { id: 'fr-gold', kind: 'frame', name: 'Gold', price: 120, css: 'linear-gradient(135deg, #FFE08A, #E09B1B)' },
       { id: 'fr-aurora', kind: 'frame', name: 'Aurora', price: 200, css: 'conic-gradient(#8B5CF6, #2F80FF, #22C55E, #8B5CF6)' },
       { id: 'fr-ember', kind: 'frame', name: 'Ember', price: 220, css: 'conic-gradient(#E5383B, #F97316, #F5B83D, #E5383B)' },
-      { id: 'freeze', kind: 'consumable', icon: '🧊', name: 'Streak Freeze', price: 80, desc: 'Miss one day without losing your streak.' },
-      { id: 'charm', kind: 'consumable', icon: '🛡️', name: 'Guild Shield Charm', price: 100, desc: '+5% guild shield until the end of this battle. One per week.' },
+      { id: 'freeze', kind: 'consumable', icon: 'ice', name: 'Streak Freeze', price: 80, desc: 'Miss one day without losing your streak.' },
+      { id: 'charm', kind: 'consumable', icon: 'shield', name: 'Guild Shield Charm', price: 100, desc: '+5% guild shield until the end of this battle. One per week.' },
     ];
 
     return {
-      version: 2,
+      version: 3,
       seededAt: now,
       school: 'Result English School',
       course: { name: 'Upper Intermediate', units: 12 },
