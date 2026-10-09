@@ -84,3 +84,11 @@ Unit titles were taken from the books' contents pages. Some are not confirmed ye
 ## Fair battles for any group size
 
 Groups range from 2 to 20 students and study different levels, so a battle is scored as a **share of each group's own potential**: if every student finished every homework of the week fully (★★, on time), the group would deal exactly 1,000 HP. A group of 2 and a group of 17, or an Upper-Intermediate and an Intermediate group, can then fight fairly. In battles, bonuses can raise one homework to at most +60% of its normal maximum, so one student in a tiny group can't win alone. Points, rewards and boss damage keep the full bonuses. In the prototype, **Profile → ⚙️ → Group size** restarts the demo with 2–20 students.
+
+## Heroes, lobby and 3D map
+
+- **Scholar heroes**: six classes, each tied to a skill (Wordsmith · vocabulary, Grammar Knight, Echo Ranger · listening, Lore Keeper · reading, Orator · speaking, Scribe · writing), with boy and girl versions in modest outfits. Students pick one under **Home → Change hero**. Approved homework grows the matching skill (Full +3, 75% +2, 50% +1).
+- **Lobby (Home)**: the hero on a glowing pedestal, power score, skills, the live battle bar with a **BATTLE** button, and today's quests.
+- **3D map** (`world3d.js`, three.js r128): each unit is a low-poly island themed from its title (bazaar, beach, park, forest camp), joined by bridges. The current unit is larger and carries the class stops and the boss.
+- **Character art** lives in `assets/heroes/<class>_<m|f>.webp`. The files in the repo now are small previews. To bring in the full-size art, allow `www.figma.com` in the environment's network settings and run `python3 tools/import_heroes.py --download` (the links expire on 16 Oct 2026), or download the two sheets and run `python3 tools/import_heroes.py boys.png girls.png`.
+

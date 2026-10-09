@@ -228,7 +228,7 @@
 
     const done = (hw) => hw.tasks.map(() => 'Full');
     return {
-      version: 4,
+      version: 5,
       seededAt: now,
       groupSize: size,
       school: 'Result English School',
@@ -245,15 +245,30 @@
         submitted: { [u5[0].id]: 'verified', [u5[1].id]: 'verified', [u5[2].id]: 'verified' },
         audio: {}, sideToday: 0, sideDone: [], chests: 0,
         fullCount: 9, earlyCount: 6, speakingCount: 4,
+        // Chosen hero (class + boy/girl art) and skill points earned from approved homework.
+        hero: { cls: 'knight', g: 'm' },
+        skills: { vocab: 42, grammar: 58, listening: 31, reading: 37, speaking: 46, writing: 28 },
       },
     };
   };
+
+  // Scholar heroes: each class is tied to the skill it trains.
+  const HEROES = [
+    { key: 'wordsmith', name: 'Wordsmith', skill: 'vocab', role: 'Vocabulary' },
+    { key: 'knight', name: 'Grammar Knight', skill: 'grammar', role: 'Grammar' },
+    { key: 'ranger', name: 'Echo Ranger', skill: 'listening', role: 'Listening' },
+    { key: 'keeper', name: 'Lore Keeper', skill: 'reading', role: 'Reading' },
+    { key: 'orator', name: 'Orator', skill: 'speaking', role: 'Speaking' },
+    { key: 'scribe', name: 'Scribe', skill: 'writing', role: 'Writing' },
+  ];
+  // Skill points for an approved task: Full +3, 75% +2, 50% +1.
+  const SKILL_GAIN = { 'Full': 3, '75%': 2, '50%': 1 };
 
   const Game = {
     DAMAGE, STATUS_FACTOR, STATUSES, FULL_BONUS, EARLY_HOURS, EARLY_MULT, LATE_MULT, STAR_MULT, ESTIMATE_STARS,
     STREAK_MIN, STREAK_BONUS, FORTRESS_HP, BATTLE_CAP, BOSS_HP_PER_MEMBER, SIDE_QUEST_DAILY_CAP, SIDE_QUEST_DAMAGE, HOUR, RANKS,
     taskDamage, timingOf, calcDamage, maxRaw, weeklyMax, shieldPct, incomingMult, fortressDamage,
-    xpForLevel, levelFromXp, levelProgress, rankFor, seed,
+    xpForLevel, levelFromXp, levelProgress, rankFor, seed, HEROES, SKILL_GAIN,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = Game;
   else root.Game = Game;
