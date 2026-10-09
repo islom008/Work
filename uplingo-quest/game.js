@@ -12,6 +12,7 @@
   const STATUS_FACTOR = { 'Full': 1, '75%': 0.75, '50%': 0.5, 'Not full': 0, 'Not started': 0 };
   const STATUSES = ['Not full', '50%', '75%', 'Full'];
   const FULL_BONUS = 20;
+  const CLASS_BONUS = 0.10;       // hero passive: +10% on tasks of the class skill
   const EARLY_HOURS = 24;
   const EARLY_MULT = 1.5;          // Early Strike
   const LATE_MULT = 0.5;
@@ -30,26 +31,28 @@
     return (DAMAGE[task.type] || 0) * (STATUS_FACTOR[status] || 0);
   };
 
-  const timingOf = (submittedAt, dueAt) => {
+  const timingOf = (submittedAt, dueAt, earlyHours = EARLY_HOURS) => {
     if (submittedAt > dueAt) return 'late';
-    if (dueAt - submittedAt >= EARLY_HOURS * HOUR) return 'early';
+    if (dueAt - submittedAt >= earlyHours * HOUR) return 'early';
     return 'ontime';
   };
 
   // Raw damage of one homework submission (before guild-size normalisation).
-  const calcDamage = ({ hw, statuses, audio = {}, submittedAt, streak = 0, stars = ESTIMATE_STARS }) => {
+  // classSkill: the hero's class skill gets +10% on matching tasks (Grammar Knight → grammar).
+  // earlyHours: Echo Ranger's "Echo Scout" shortens the Early Strike window to 12h for one homework.
+  const calcDamage = ({ hw, statuses, audio = {}, submittedAt, streak = 0, stars = ESTIMATE_STARS, classSkill, earlyHours }) => {
     const lines = hw.tasks.map((t, i) => ({ label: t.label, type: t.type, status: statuses[i] || 'Not started',
-      dmg: taskDamage(t, statuses[i], !!audio[i]), needsAudio: t.type === 'speaking' && !audio[i] }));
+      dmg: taskDamage(t, statuses[i], !!audio[i]) * (classSkill && t.type === classSkill ? 1 + CLASS_BONUS : 1), needsAudio: t.type === 'speaking' && !audio[i] }));
     const base = lines.reduce((a, l) => a + l.dmg, 0);
     const allFull = statuses.length === hw.tasks.length && statuses.every((s) => s === 'Full')
       && lines.every((l) => !l.needsAudio);
     const fullBonus = allFull ? FULL_BONUS : 0;
-    const timing = timingOf(submittedAt, hw.dueAt);
+    const timing = timingOf(submittedAt, hw.dueAt, earlyHours);
     const timingMult = timing === 'early' ? EARLY_MULT : timing === 'late' ? LATE_MULT : 1;
     const starMult = STAR_MULT[stars] || 1;
     const streakMult = streak >= STREAK_MIN ? 1 + STREAK_BONUS : 1;
     const total = Math.round((base + fullBonus) * timingMult * starMult * streakMult);
-    return { lines, base, fullBonus, allFull, timing, timingMult, stars, starMult, streakMult, total, crit: stars === 3 };
+    return { lines, base: Math.round(base), fullBonus, allFull, timing, timingMult, stars, starMult, streakMult, total, crit: stars === 3 };
   };
 
   // Fairness: groups range from 2 to 20 students, study different levels and get different
@@ -228,7 +231,7 @@
 
     const done = (hw) => hw.tasks.map(() => 'Full');
     return {
-      version: 5,
+      version: 6,
       seededAt: now,
       groupSize: size,
       school: 'Result English School',
@@ -246,27 +249,43 @@
         audio: {}, sideToday: 0, sideDone: [], chests: 0,
         fullCount: 9, earlyCount: 6, speakingCount: 4,
         // Chosen hero (class + boy/girl art) and skill points earned from approved homework.
-        hero: { cls: 'knight', g: 'm' },
+        hero: { cls: 'knight', g: 'm', skin: 'light' },
+        abilityUsed: null, scoutReady: false, wisdomUntil: 0,
         skills: { vocab: 42, grammar: 58, listening: 31, reading: 37, speaking: 46, writing: 28 },
       },
     };
   };
 
   // Scholar heroes: each class is tied to the skill it trains.
+  // Every class is open to every student, and all bonuses still go through the battle cap,
+  // so choosing a class is about play style, not about winning.
+  // type: the team role shown on the hero card.
   const HEROES = [
-    { key: 'wordsmith', name: 'Wordsmith', skill: 'vocab', role: 'Vocabulary' },
-    { key: 'knight', name: 'Grammar Knight', skill: 'grammar', role: 'Grammar' },
-    { key: 'ranger', name: 'Echo Ranger', skill: 'listening', role: 'Listening' },
-    { key: 'keeper', name: 'Lore Keeper', skill: 'reading', role: 'Reading' },
-    { key: 'orator', name: 'Orator', skill: 'speaking', role: 'Speaking' },
-    { key: 'scribe', name: 'Scribe', skill: 'writing', role: 'Writing' },
+    { key: 'wordsmith', name: 'Wordsmith', skill: 'vocab', role: 'Vocabulary', type: 'Attacker',
+      passive: '+10% damage on vocabulary and word-skills tasks.',
+      ability: { key: 'storm', name: 'Word Storm', text: 'Hit the other fortress with 15 bonus points right away.' } },
+    { key: 'knight', name: 'Grammar Knight', skill: 'grammar', role: 'Grammar', type: 'Defender',
+      passive: '+10% damage on grammar tasks.',
+      ability: { key: 'wall', name: 'Shield Wall', text: '+5% guild shield until the battle ends, so the enemy hits softer.' } },
+    { key: 'ranger', name: 'Echo Ranger', skill: 'listening', role: 'Listening', type: 'Speedster',
+      passive: '+10% damage on listening tasks.',
+      ability: { key: 'scout', name: 'Echo Scout', text: 'Your next homework counts as an Early Strike (×1.5) if sent 12h before the deadline, not 24h.' } },
+    { key: 'keeper', name: 'Lore Keeper', skill: 'reading', role: 'Reading', type: 'Supplier',
+      passive: '+10% damage on reading tasks.',
+      ability: { key: 'wisdom', name: 'Wisdom Aura', text: 'Extra quests give double coins for the rest of the day.' } },
+    { key: 'orator', name: 'Orator', skill: 'speaking', role: 'Speaking', type: 'Leader',
+      passive: '+10% damage on speaking tasks.',
+      ability: { key: 'rally', name: 'Rally Cry', text: 'Cheer on the teammates who haven\'t attacked yet (no names shown) and add +5% guild shield.' } },
+    { key: 'scribe', name: 'Scribe', skill: 'writing', role: 'Writing', type: 'Healer',
+      passive: '+10% damage on writing tasks.',
+      ability: { key: 'seal', name: 'Ink Seal', text: 'Protect your streak: get a free Streak Freeze.' } },
   ];
   // Skill points for an approved task: Full +3, 75% +2, 50% +1.
   const SKILL_GAIN = { 'Full': 3, '75%': 2, '50%': 1 };
 
   const Game = {
     DAMAGE, STATUS_FACTOR, STATUSES, FULL_BONUS, EARLY_HOURS, EARLY_MULT, LATE_MULT, STAR_MULT, ESTIMATE_STARS,
-    STREAK_MIN, STREAK_BONUS, FORTRESS_HP, BATTLE_CAP, BOSS_HP_PER_MEMBER, SIDE_QUEST_DAILY_CAP, SIDE_QUEST_DAMAGE, HOUR, RANKS,
+    STREAK_MIN, STREAK_BONUS, FORTRESS_HP, BATTLE_CAP, CLASS_BONUS, BOSS_HP_PER_MEMBER, SIDE_QUEST_DAILY_CAP, SIDE_QUEST_DAMAGE, HOUR, RANKS,
     taskDamage, timingOf, calcDamage, maxRaw, weeklyMax, shieldPct, incomingMult, fortressDamage,
     xpForLevel, levelFromXp, levelProgress, rankFor, seed, HEROES, SKILL_GAIN,
   };

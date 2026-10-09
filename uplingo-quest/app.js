@@ -11,12 +11,12 @@
   const STUDENT_ONLY = !!window.UQ_STUDENT_ONLY;
 
   // ---------------------------------------------------------------- storage
-  const STORE = 'uplingo-quest-v5';
+  const STORE = 'uplingo-quest-v6';
   const loadState = () => {
     try {
       const s = JSON.parse(localStorage.getItem(STORE));
       // A battle that ended while the demo was closed starts a fresh demo week.
-      if (s && s.version === 5 && Date.now() < s.battle.endsAt) return s;
+      if (s && s.version === 6 && Date.now() < s.battle.endsAt) return s;
     } catch (e) { /* storage blocked: fall through to a fresh seed */ }
     return G.seed();
   };
@@ -56,7 +56,7 @@
     const { myGuild, battle, feed, homeworks, bosses, me } = s;
     const enemy = battle.enemy;
     const attackers = myGuild.members.filter((m) => m.week > 0).length;
-    const myShield = G.shieldPct(attackers, myGuild.members.length, me.charmUsed ? 0.05 : 0);
+    const myShield = G.shieldPct(attackers, myGuild.members.length, (me.charmUsed ? 0.05 : 0) + (battle.shieldBonus || 0));
     const enemyShield = G.shieldPct(enemy.attackers.length, enemy.members.length);
     const landed = (side) => feed.filter((f) => f.side === side && !f.pending).reduce((a, f) => a + f.dmg, 0);
     const usHP = Math.max(0, G.FORTRESS_HP - battle.base.enemy - landed('enemy'));
@@ -161,9 +161,31 @@
       style: { height, width: 'auto', display: 'block', filter: 'drop-shadow(0 10px 18px rgba(0,0,0,0.55))', ...style } });
   };
   const power = (s) => Object.values(s.me.skills || {}).reduce((a, v) => a + v, 0) * 10;
+  const has3D = () => !!(window.Heroes3D && window.Heroes3D.available());
+  // Still picture of a code-built hero (falls back to the image files without WebGL).
+  const HeroPortrait = ({ hero, height }) => {
+    if (!has3D()) return h(HeroImg, { cls: hero.cls, g: hero.g, height });
+    let src = null;
+    try { src = window.Heroes3D.portrait(hero, 256); } catch (e) { return h(HeroImg, { cls: hero.cls, g: hero.g, height }); }
+    return h('img', { src, alt: '', height, draggable: false, style: { height, width: 'auto', display: 'block', filter: 'drop-shadow(0 8px 14px rgba(0,0,0,0.55))' } });
+  };
+  // Live 3D hero on the lobby pedestal: idles, breathes, drag to turn.
+  const HeroStage = ({ hero }) => {
+    const ref = useRef(null);
+    const stage = useRef(null);
+    useEffect(() => {
+      if (!has3D()) return undefined;
+      stage.current = window.Heroes3D.mountStage(ref.current, hero);
+      return () => stage.current && stage.current.destroy();
+    }, []);
+    useEffect(() => { if (stage.current) stage.current.set(hero); }, [hero.cls, hero.g, hero.skin]);
+    if (!has3D()) return h('div', { className: 'hero-bob' }, h(HeroImg, { cls: hero.cls, g: hero.g, height: 230 }));
+    return h('div', { ref, className: 'hero-3d', 'aria-label': 'Your hero. Drag to turn.', role: 'img' });
+  };
+  const abilityReady = (s) => s.me.abilityUsed !== s.battle.startedAt;
 
   // ---------------------------------------------------------------- Home (game lobby)
-  const HomeScreen = ({ s, d, openTask, openBattle, openNotifs, notifCount, openHero, go }) => {
+  const HomeScreen = ({ s, d, openTask, openBattle, openNotifs, notifCount, openHero, go, useAbility }) => {
     const hw = d.nextHw;
     const sts = hw ? (s.me.tasks[hw.id] || hw.tasks.map(() => 'Not started')) : [];
     const done = sts.filter(isMarked).length;
@@ -185,10 +207,11 @@
           h('div', { style: { textAlign: 'right' } }, h('div', { className: 'eyebrow' }, 'Power'), h('div', { className: 'display num', style: { fontSize: 26, color: 'var(--accent)' } }, fmt(power(s))))),
         h('div', { className: 'hero-wrap' },
           h('div', { className: 'pedestal' }, h('i'), h('b')),
-          h('div', { className: 'hero-bob' }, h(HeroImg, { cls: hero.key, g: s.me.hero.g, height: 230 }))),
+          h(HeroStage, { hero: s.me.hero })),
         h('div', { className: 'stage-bottom' },
           h('span', { className: 'badge', style: { background: 'rgba(255,255,255,0.06)', color: d.rank.color } }, d.rank.icon + ' ' + d.rank.name),
-          h('span', { className: 'badge b-green' }, '🔥 ' + s.me.streak + '-day streak'),
+          h('span', { className: 'badge b-green' }, hero.type),
+          h('span', { className: 'badge b-gold' }, '🔥 ' + s.me.streak + ' days'),
           h('button', { className: 'btn ghost sm', onClick: openHero }, 'Change hero'))),
       h('div', { className: 'page', style: { paddingTop: 10 } },
         h('div', { className: 'card battle-strip' },
@@ -199,6 +222,16 @@
               h('div', { style: { marginTop: 6 } }, h(VsBar, { us: d.usHP, them: d.enemyHP }))),
             h(Crest, { tone: 'red', crest: d.enemy.crest, size: 40, spikes: false })),
           h('button', { className: 'btn gold block battle-btn', style: { marginTop: 12 }, onClick: openBattle }, h(Icon, { n: 'swords', s: 20 }), 'BATTLE')),
+        h('div', { className: 'card ability-card' },
+          h('div', { className: 'row' },
+            h('div', { className: 'ability-ico' }, h(Icon, { n: 'star', s: 22, fill: 'currentColor' })),
+            h('div', { className: 'grow' },
+              h('div', { className: 'eyebrow', style: { color: 'var(--accent)' } }, 'Ability · once per battle'),
+              h('div', { style: { fontWeight: 800, fontSize: 15 } }, hero.ability.name),
+              h('div', { className: 'tiny muted', style: { marginTop: 2 } }, hero.ability.text)),
+            h('button', { className: 'btn gold sm', disabled: !abilityReady(s), onClick: useAbility }, abilityReady(s) ? 'Use' : 'Used')),
+          h('div', { className: 'tiny', style: { marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)', color: 'var(--text-2)' } },
+            h('b', { style: { color: 'var(--text)' } }, 'Passive: '), hero.passive)),
         h('div', { className: 'card' },
           h('div', { className: 'row', style: { marginBottom: 10 } }, h('div', { className: 'h2 grow' }, 'Skills'), h('span', { className: 'tiny muted' }, 'Grow them with approved homework')),
           h('div', { style: { display: 'grid', gap: 9 } }, Object.keys(SKILL_NAME).map((k) => h('div', { key: k, className: 'row', style: { gap: 10 } },
@@ -214,19 +247,30 @@
         hw && h('div', { className: 'tiny muted' }, hw.label + ' · ' + hw.title + ' · Unit ' + hw.unit + ' ' + unitName(s, hw.unit))));
   };
 
+  const SKIN_SWATCH = { light: '#f1c6a0', medium: '#d39a6a', tan: '#a8703f' };
   const HeroSheet = ({ s, onClose, setHero }) => {
     const [g, setG] = useState(s.me.hero.g);
+    const [skin, setSkin] = useState(s.me.hero.skin || 'light');
+    const [pick, setPick] = useState(s.me.hero.cls);
+    const sel = G.HEROES.find((x) => x.key === pick);
     return h(Sheet, { onClose },
-      h('div', { className: 'row', style: { marginBottom: 12 } }, h('div', { className: 'h1 grow' }, 'Choose your hero'),
+      h('div', { className: 'row', style: { marginBottom: 10 } }, h('div', { className: 'h1 grow' }, 'Choose your hero'),
         h('div', { className: 'pill-tabs' }, [['m', 'Boy'], ['f', 'Girl']].map(([k, l]) => h('button', { key: k, className: g === k ? 'on' : '', onClick: () => setG(k) }, l)))),
-      h('div', { className: 'tiny muted', style: { marginBottom: 12 } }, 'Each hero trains one skill. Your class skill is highlighted on your profile; it doesn\'t change battle damage.'),
-      h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 8 } }, G.HEROES.map((x) => {
-        const on = s.me.hero.cls === x.key && s.me.hero.g === g;
-        return h('button', { key: x.key + g, className: cx('hero-card', on && 'on'), onClick: () => { setHero({ cls: x.key, g }); onClose(); } },
-          h('div', { className: 'hero-card-art' }, h(HeroImg, { cls: x.key, g, height: 110 })),
+      h('div', { className: 'row', style: { marginBottom: 12, gap: 8 } },
+        h('span', { className: 'tiny muted' }, 'Skin'),
+        Object.keys(SKIN_SWATCH).map((k) => h('button', { key: k, 'aria-label': 'Skin ' + k, onClick: () => setSkin(k),
+          style: { width: 26, height: 26, borderRadius: '50%', background: SKIN_SWATCH[k], boxShadow: skin === k ? '0 0 0 2px var(--bg), 0 0 0 4px var(--accent)' : 'none' } }))),
+      h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 8 } }, G.HEROES.map((x) =>
+        h('button', { key: x.key + g + skin, className: cx('hero-card', pick === x.key && 'on'), onClick: () => setPick(x.key) },
+          h('div', { className: 'hero-card-art' }, h(HeroPortrait, { hero: { cls: x.key, g, skin }, height: 112 })),
           h('div', { style: { fontWeight: 700, fontSize: 13 } }, x.name),
-          h('div', { className: 'tiny', style: { color: 'var(--accent)' } }, x.role));
-      })));
+          h('div', { className: 'tiny', style: { color: 'var(--accent)' } }, x.role + ' · ' + x.type)))),
+      sel && h('div', { className: 'card', style: { marginTop: 12 } },
+        h('div', { className: 'row' }, h('div', { className: 'h2 grow' }, sel.name), h(Badge, { k: 'b-green' }, sel.type)),
+        h('div', { className: 'tiny', style: { marginTop: 8, lineHeight: 1.5 } }, h('b', null, 'Passive: '), sel.passive),
+        h('div', { className: 'tiny', style: { marginTop: 4, lineHeight: 1.5 } }, h('b', null, 'Ability (once per battle): ' + sel.ability.name + '. '), sel.ability.text),
+        h('button', { className: 'btn gold block', style: { marginTop: 12 }, onClick: () => { setHero({ cls: sel.key, g, skin }); onClose(); } }, 'Play as ' + sel.name)),
+      h('div', { className: 'tiny muted', style: { marginTop: 10, lineHeight: 1.5 } }, 'Every student can choose any hero. All bonuses still count toward the battle cap, so no class can win a battle alone.'));
   };
 
   // ---------------------------------------------------------------- Map (3D islands)
@@ -287,7 +331,7 @@
               h('span', { className: cx('stop-label', mine && 'cur'), style: pos(p, i % 2 ? 44 : -44, 0) }, hw.label),
               !mine && here.length > 0 && h('div', { className: 'mate-pin', style: pos(p, 0, -6) }, h(Face, { face: here[0].face, size: 28 }),
                 here.length > 1 && h('span', { className: 'badge b-green', style: { position: 'absolute', top: -8, right: -14 } }, '+' + (here.length - 1))),
-              mine && h('div', { className: 'me-pin', style: pos(p, 0, 4) }, h(HeroImg, { cls: hero.key, g: s.me.hero.g, height: 74 })));
+              mine && h('div', { className: 'me-pin', style: pos(p, 0, 4) }, h(HeroPortrait, { hero: s.me.hero, height: 78 })));
           }),
           d.liveBoss && P('boss') && h('button', { className: 'boss-pin', style: { ...pos(P('boss'), 46, 6), transform: 'translate(-50%, -50%)' }, onClick: openRaid, 'aria-label': 'Boss raid: ' + d.liveBoss.name + ', ' + pct(d.liveBoss.hp - d.liveBoss.dealt, d.liveBoss.hp) + '% HP left' },
             h(Emo, { v: d.liveBoss.icon, size: 24 }), h('span', null, pct(d.liveBoss.hp - d.liveBoss.dealt, d.liveBoss.hp) + '%')))));
@@ -346,7 +390,7 @@
     const sts = s.me.tasks[hw.id] || hw.tasks.map(() => 'Not started');
     const audio = s.me.audio[hw.id] || {};
     const sub = s.me.submitted[hw.id];
-    const est = G.calcDamage({ hw, statuses: sts, audio, submittedAt: now, streak: s.me.streak });
+    const est = G.calcDamage({ hw, statuses: sts, audio, submittedAt: now, streak: s.me.streak, classSkill: heroOf(s).skill, earlyHours: s.me.scoutReady ? 12 : undefined });
     const fortress = G.fortressDamage(est.total, d.myMax, d.enemyShield, hw);
     const anyDone = sts.some(isMarked);
     const completed = s.homeworks.filter((x) => s.me.submitted[x.id]);
@@ -394,6 +438,8 @@
                   est.timing === 'early' && h(Badge, { k: 'b-gold' }, '⚡ Early Strike ×1.5'),
                   est.timing === 'late' && h(Badge, { k: 'b-red' }, 'Late ×0.5'),
                   est.streakMult > 1 && h(Badge, { k: 'b-red' }, '🔥 Streak +10%'),
+                  hw.tasks.some((t) => t.type === heroOf(s).skill) && h(Badge, { k: 'b-green' }, heroOf(s).name + ' +10%'),
+                  s.me.scoutReady && h(Badge, { k: 'b-green' }, 'Echo Scout ready'),
                   h('span', null, '· assumes ★★')),
                 h('button', { className: 'btn gold block', style: { marginTop: 12 }, disabled: !anyDone, onClick: () => submit(hw, sts, audio, est, fortress) },
                   h(Icon, { n: 'swords', s: 18 }), anyDone ? 'Attack the Dragons · ' + fortress + ' damage' : 'Mark a task to attack'))),
@@ -818,7 +864,7 @@
       const hw = s.homeworks.find((x) => x.id === sub.hwId);
       const st = stars[sub.id] || 2;
       const isCrit = st === 3 || !!crit[sub.id];
-      const dmg = G.calcDamage({ hw, statuses: sub.statuses, audio: sub.audio, submittedAt: sub.submittedAt, streak: sub.streak, stars: isCrit ? 3 : st });
+      const dmg = G.calcDamage({ hw, statuses: sub.statuses, audio: sub.audio, submittedAt: sub.submittedAt, streak: sub.streak, stars: isCrit ? 3 : st, classSkill: sub.classSkill, earlyHours: sub.earlyHours });
       const fort = G.fortressDamage(dmg.total, d.myMax, d.enemyShield, hw);
       const m = s.myGuild.members.find((x) => x.id === sub.who);
       return h('div', { key: sub.id, className: 'card' },
@@ -1036,7 +1082,9 @@
       const id = uid(), sid = uid();
       up((n) => {
         n.me.submitted[hw.id] = 'pending';
-        n.submissions.push({ id: sid, who: n.me.id, whoName: n.me.name, hwId: hw.id, statuses, audio, submittedAt: Date.now(), streak: n.me.streak, state: 'pending', feedId: id });
+        n.submissions.push({ id: sid, who: n.me.id, whoName: n.me.name, hwId: hw.id, statuses, audio, submittedAt: Date.now(), streak: n.me.streak, state: 'pending', feedId: id,
+          classSkill: heroOf(n).skill, earlyHours: n.me.scoutReady ? 12 : undefined });
+        n.me.scoutReady = false;
         n.feed.push({ id, at: Date.now(), side: 'us', who: n.me.name, what: 'completed ' + hw.label + (est.allFull ? ' · full homework' : ''), dmg: fortress, pending: true, early: est.timing === 'early' });
       });
       setFresh(id);
@@ -1050,6 +1098,30 @@
         }, 8000);
       } else flash('Attack sent! To approve it: Profile → ⚙️ → Teacher view.', '⚔️');
     };
+    // Hero abilities: once per battle each.
+    const useAbility = () => {
+      const cur = sRef.current;
+      if (cur.me.abilityUsed === cur.battle.startedAt) return;
+      const hero = heroOf(cur);
+      const dd = derive(cur, Date.now());
+      const id = uid();
+      up((n) => {
+        n.me.abilityUsed = n.battle.startedAt;
+        const k = hero.ability.key;
+        if (k === 'storm') n.feed.push({ id, at: Date.now(), side: 'us', who: n.me.name, what: 'cast Word Storm', dmg: G.fortressDamage(15, dd.myMax, dd.enemyShield), quest: true });
+        if (k === 'wall' || k === 'rally') n.battle.shieldBonus = (n.battle.shieldBonus || 0) + 0.05;
+        if (k === 'scout') n.me.scoutReady = true;
+        if (k === 'wisdom') { const e = new Date(); e.setHours(23, 59, 59, 999); n.me.wisdomUntil = e.getTime(); }
+        if (k === 'seal') n.me.freezes += 1;
+      });
+      const msg = {
+        storm: 'Word Storm hit the Dragons!', wall: 'Shield Wall raised: +5% guild shield', scout: 'Echo Scout ready: Early Strike from 12h before the deadline',
+        wisdom: 'Wisdom Aura: extra quests give double coins today', rally: 'Rally Cry sent to ' + dd.notAttacked + ' teammates · +5% guild shield', seal: 'Ink Seal: you got a free Streak Freeze',
+      }[hero.ability.key];
+      if (hero.ability.key === 'storm') setFresh(id);
+      flash(msg, '✨');
+    };
+
     const completeQuest = (q) => {
       const rewarded = sRef.current.me.sideToday < G.SIDE_QUEST_DAILY_CAP;
       const dmg = rewarded ? G.fortressDamage(G.SIDE_QUEST_DAMAGE, d.myMax, d.enemyShield) : 0;
@@ -1057,7 +1129,7 @@
       up((n) => {
         n.me.sideDone.push(q.id);
         if (rewarded) {
-          n.me.sideToday += 1; n.me.coins += q.coins; n.me.xp += q.xp;
+          n.me.sideToday += 1; n.me.coins += q.coins * (Date.now() < (n.me.wisdomUntil || 0) ? 2 : 1); n.me.xp += q.xp;
           n.feed.push({ id, at: Date.now(), side: 'us', who: n.me.name, what: 'finished an extra quest', dmg, quest: true });
           const meM = n.myGuild.members.find((m) => m.me); meM.week += G.SIDE_QUEST_DAMAGE; n.me.totalDamage += G.SIDE_QUEST_DAMAGE;
         }
@@ -1087,7 +1159,7 @@
     const verify = (sub, stars) => {
       const cur = sRef.current;
       const hw = cur.homeworks.find((x) => x.id === sub.hwId);
-      const dmg = G.calcDamage({ hw, statuses: sub.statuses, audio: sub.audio, submittedAt: sub.submittedAt, streak: sub.streak, stars });
+      const dmg = G.calcDamage({ hw, statuses: sub.statuses, audio: sub.audio, submittedAt: sub.submittedAt, streak: sub.streak, stars, classSkill: sub.classSkill, earlyHours: sub.earlyHours });
       const dd0 = derive(cur, Date.now());
       const fort = G.fortressDamage(dmg.total, dd0.myMax, dd0.enemyShield, hw);
       const isMe = sub.who === cur.me.id;
@@ -1171,7 +1243,7 @@
       main = h(BattleScreen, { s, d, now, fresh, back: () => setBattleOpen(false), openRules: () => setSheet({ kind: 'rules' }) });
     } else {
       main = h('main', null,
-        tab === 'home' && h(HomeScreen, { s, d, openTask, openBattle: () => setBattleOpen(true), openNotifs: () => setSheet({ kind: 'notifs' }), notifCount: notifs.length, openHero: () => setSheet({ kind: 'hero' }), go }),
+        tab === 'home' && h(HomeScreen, { s, d, openTask, openBattle: () => setBattleOpen(true), openNotifs: () => setSheet({ kind: 'notifs' }), notifCount: notifs.length, openHero: () => setSheet({ kind: 'hero' }), go, useAbility }),
         tab === 'map' && h(MapScreen, { s, d, openHw: (id) => { setHwSel(id); go('homework'); }, goHomework: () => { setHwSel(null); go('homework'); },
           openLocked: () => setSheet({ kind: 'locked' }), openRaid: () => go('guild'), openInfo: () => setSheet({ kind: 'mapinfo' }) }),
         tab === 'homework' && h(HomeworkScreen, { s, d, now, hwSel, setHwSel, openTask, openQuests: () => setSheet({ kind: 'quests' }), submit }),
@@ -1194,7 +1266,7 @@
         })),
       S.kind === 'task' && h(TaskSheet, { s, hwId: S.hwId, idx: S.idx, onClose: close, setStatus, setAudio }),
       S.kind === 'rules' && h(RulesSheet, { onClose: close }),
-      S.kind === 'hero' && h(HeroSheet, { s, onClose: close, setHero: (hero) => { up((n) => { n.me.hero = hero; }); flash('You are now a ' + G.HEROES.find((x) => x.key === hero.cls).name, '🛡️'); } }),
+      S.kind === 'hero' && h(HeroSheet, { s, onClose: close, setHero: (hero) => { up((n) => { n.me.hero = hero; }); flash('You are now playing as the ' + G.HEROES.find((x) => x.key === hero.cls).name, '🛡️'); } }),
       S.kind === 'notifs' && h(NotifSheet, { items: notifs, onClose: close }),
       S.kind === 'quests' && h(QuestLibrary, { s, onClose: close, openQuest: (id) => setSheet({ kind: 'quest', id }) }),
       S.kind === 'quest' && h(QuestSheet, { key: S.id, s, qId: S.id, onClose: () => setSheet({ kind: 'quests' }), complete: completeQuest }),

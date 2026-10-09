@@ -247,7 +247,7 @@ input.field:focus { border-color: var(--gold); }
   background-image: linear-gradient(rgba(61,245,138,0.18) 1px, transparent 1px), linear-gradient(90deg, rgba(61,245,138,0.18) 1px, transparent 1px); background-size: 34px 34px;
   mask-image: radial-gradient(60% 80% at 50% 100%, #000 30%, transparent 75%); -webkit-mask-image: radial-gradient(60% 80% at 50% 100%, #000 30%, transparent 75%); }
 .stage-top { position: relative; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
-.hero-wrap { position: relative; height: 270px; display: flex; justify-content: center; align-items: flex-end; margin-top: 4px; }
+.hero-wrap { position: relative; height: 290px; display: flex; justify-content: center; align-items: flex-end; margin-top: 4px; }
 .hero-bob { position: relative; z-index: 2; margin-bottom: 26px; animation: bob 3.2s ease-in-out infinite; }
 @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
 .pedestal { position: absolute; bottom: 4px; left: 50%; width: 220px; height: 64px; transform: translateX(-50%); z-index: 1; }
@@ -281,3 +281,8 @@ input.field:focus { border-color: var(--gold); }
 .boss-pin { transform: translate(-50%, -100%); display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 4px 6px; border-radius: 12px; font-size: 10px !important;
   background: radial-gradient(circle at 40% 30%, #8B5CF6, #3D1D8F); border: 2px solid #B9A2FF; box-shadow: 0 0 20px -4px #8B5CF6; font-weight: 800; font-size: 11px; }
 @media (prefers-reduced-motion: reduce) { .hero-bob, .me-pin, .pedestal b, .battle-btn { animation: none; } }
+
+.hero-3d { position: relative; z-index: 2; width: 100%; height: 290px; margin-bottom: -6px; touch-action: pan-y; cursor: grab; }
+.hero-3d:active { cursor: grabbing; }
+.ability-card { background: linear-gradient(120deg, rgba(61,245,138,0.12), transparent 55%), var(--surface); border-color: rgba(61,245,138,0.35); }
+.ability-ico { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; color: var(--accent-ink); background: linear-gradient(180deg, #7DFFB6, var(--accent-2)); box-shadow: 0 0 16px -4px var(--accent); flex-shrink: 0; }

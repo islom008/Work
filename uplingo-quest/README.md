@@ -92,3 +92,18 @@ Groups range from 2 to 20 students and study different levels, so a battle is sc
 - **3D map** (`world3d.js`, three.js r128): each unit is a low-poly island themed from its title (bazaar, beach, park, forest camp), joined by bridges. The current unit is larger and carries the class stops and the boss.
 - **Character art** lives in `assets/heroes/<class>_<m|f>.webp`. The files in the repo now are small previews. To bring in the full-size art, allow `www.figma.com` in the environment's network settings and run `python3 tools/import_heroes.py --download` (the links expire on 16 Oct 2026), or download the two sheets and run `python3 tools/import_heroes.py boys.png girls.png`.
 
+## 3D heroes and abilities (code-built)
+
+`heroes3d.js` builds every hero from code with three.js: chibi proportions, toon shading and bold outlines, boy and girl versions (several girls wear a headscarf), three skin tones and class props. The lobby shows the hero live (idle animation, drag to turn); lists and map pins use rendered portraits. The image files in `assets/heroes/` are only a fallback for devices without WebGL.
+
+| Hero | Skill | Role | Passive | Ability (once per battle) |
+|---|---|---|---|---|
+| Wordsmith | Vocabulary | Attacker | +10% on vocabulary tasks | Word Storm: 15 bonus points of damage now |
+| Grammar Knight | Grammar | Defender | +10% on grammar tasks | Shield Wall: +5% guild shield until the battle ends |
+| Echo Ranger | Listening | Speedster | +10% on listening tasks | Echo Scout: next homework is an Early Strike from 12h before the deadline |
+| Lore Keeper | Reading | Supplier | +10% on reading tasks | Wisdom Aura: double coins from extra quests today |
+| Orator | Speaking | Leader | +10% on speaking tasks | Rally Cry: cheers on teammates who haven't attacked, +5% guild shield |
+| Scribe | Writing | Healer | +10% on writing tasks | Ink Seal: a free Streak Freeze |
+
+Any student can pick any hero, and every bonus still counts toward the battle cap.
+
