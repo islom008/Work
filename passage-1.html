@@ -43,6 +43,17 @@ button,input{font:inherit}
 .zoom button:disabled{color:#bbb;cursor:default;background:#fff}
 .zoom-val{min-width:52px;text-align:center;font-size:13px;font-weight:700;border-left:1px solid var(--line);border-right:1px solid var(--line);line-height:34px;cursor:pointer}
 .hl-pop{position:absolute;z-index:30;background:var(--dark);color:#fff;border:0;border-radius:6px;padding:6px 12px;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.hl-pop.meaning{background:var(--red)}
+.hl-pop.meaning::after{border-top-color:var(--red)}
+.vocab-card{position:absolute;z-index:40;width:min(340px,calc(100vw - 16px));background:#fff;border:1px solid var(--line);border-top:3px solid var(--red);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.14);padding:12px 34px 12px 14px;font-size:calc(14px * var(--z));line-height:1.45}
+.vc-head{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+.vc-word{color:var(--red);font-weight:700;font-size:1.15em}
+.vc-pos{color:var(--muted);font-style:italic;font-size:.9em}
+.vc-meaning{color:var(--ink)}
+.vc-similar{color:var(--muted);font-size:.92em;margin-top:6px}
+.vc-similar b{color:var(--ink);font-weight:700}
+.vc-close{position:absolute;top:6px;right:8px;border:0;background:none;font-size:20px;line-height:1;color:var(--muted);cursor:pointer;padding:2px 4px}
+.vc-close:hover{color:var(--ink)}
 .hl-pop::after{content:"";position:absolute;left:50%;bottom:-5px;margin-left:-5px;border:5px solid transparent;border-bottom:0;border-top-color:var(--dark)}
 
 /* ---------- page / sheet ---------- */
@@ -393,7 +404,7 @@ button,input{font:inherit}
   const pop = document.createElement('button');
   pop.type = 'button'; pop.className = 'hl-pop'; pop.textContent = 'Highlight'; pop.hidden = true;
   document.body.appendChild(pop);
-  let lastRange = null;
+  let lastRange = null, lastHighlight = null;
 
   function usableRange(){
     const sel = window.getSelection();
@@ -406,6 +417,7 @@ button,input{font:inherit}
   function highlightSelection(){
     const range = usableRange() || lastRange;
     if (!range || range.collapsed) return;
+    const text = range.toString(), made = [];
     // wrap each selected text fragment in its own <mark>, skipping form controls
     const walker = document.createTreeWalker(sheet, NodeFilter.SHOW_TEXT, {
       acceptNode: n => range.intersectsNode(n) && n.nodeValue.trim() && !n.parentElement.closest(SKIP)
@@ -418,8 +430,9 @@ button,input{font:inherit}
       if (start >= end) return;
       const r = document.createRange(); r.setStart(node, start); r.setEnd(node, end);
       const m = document.createElement('mark'); m.title = 'Click to remove highlight';
-      r.surroundContents(m);
+      r.surroundContents(m); made.push(m);
     });
+    lastHighlight = {text, marks: made};
     window.getSelection().removeAllRanges();
     lastRange = null; pop.hidden = true;
   }
@@ -437,7 +450,7 @@ button,input{font:inherit}
     if (rect.top < 120) top = rect.bottom + window.scrollY + 10; // not enough room above (sticky bar)
     pop.style.left = left + 'px'; pop.style.top = top + 'px';
   }
-  document.addEventListener('mouseup', e => { if (e.target !== pop) setTimeout(placePopup, 0); });
+  document.addEventListener('mouseup', e => { if (!e.target.closest('.hl-pop, .vocab-card')) setTimeout(placePopup, 0); });
   document.addEventListener('touchend', () => setTimeout(placePopup, 250));
   document.addEventListener('selectionchange', () => { if (!usableRange()) pop.hidden = true; else lastRange = usableRange().cloneRange(); });
   document.querySelectorAll('.pane-passage').forEach(el => el.addEventListener('scroll', () => { pop.hidden = true; }));
@@ -455,6 +468,133 @@ button,input{font:inherit}
     const parent = m.parentNode;
     m.replaceWith(...m.childNodes); parent.normalize();
   });
+
+  // ---- vocabulary: keywords from the answer areas of the passage ----
+  // [forms that match a selection], part of speech, meaning, similar words
+  const VOCAB = [
+    [["settlement"], "noun", "the process of people arriving in a new place and making homes there", "colonisation, settling"],
+    [["recognition"], "noun", "the understanding or acceptance that something is true", "realisation, awareness"],
+    [["collapse"], "verb", "to fall down suddenly", "fall down, cave in"],
+    [["not infrequent", "a not infrequent event"], "phrase", "happening quite often (two negatives = positive)", "fairly common, frequent"],
+    [["domestic market", "domestic"], "noun", "buyers inside the country itself, not abroad", "home market, local market"],
+    [["suitability"], "noun", "how right or appropriate something is for a purpose", "fitness, appropriateness"],
+    [["sailing vessels", "vessels", "vessel"], "noun", "ships or boats that move using sails", "sailing ships, boats"],
+    [["coniferous"], "adjective", "(of trees) having needles and cones and staying green all year, like pine", "evergreen, cone-bearing"],
+    [["kauri"], "noun", "a very tall tree that grows in New Zealand, valued for its long straight trunk", ""],
+    [["export earner", "major export earner"], "noun", "a product that brings a lot of money into a country from sales abroad", "source of export income"],
+    [["unsustainable"], "adjective", "not able to continue at the same level because the resource will run out", "unmaintainable, too fast to last"],
+    [["indigenous"], "adjective", "native; growing or living naturally in a place from the beginning", "native, local, natural"],
+    [["plantations", "plantation"], "noun", "large areas where trees or crops are planted and grown for sale", "planted forests, farms"],
+    [["plantation-grown"], "adjective", "grown in a planted forest, not in a natural forest", "farmed, cultivated"],
+    [["sawn timber", "sawn wood"], "noun", "wood that has been cut into boards or planks", "cut wood, lumber"],
+    [["higher-value end uses", "end uses"], "noun", "the final purposes a product is used for; 'higher-value' means they earn more money", "final uses"],
+    [["well suited"], "adjective", "very appropriate for a particular purpose", "ideal, appropriate"],
+    [["versatility"], "noun", "the ability to be used in many different ways", "adaptability, wide range of uses"],
+    [["by-products", "by-product"], "noun", "things produced in addition to the main product", "secondary products, spin-offs"],
+    [["residues", "residue"], "noun", "what is left over after the main part has been used", "remains, leftovers, waste"],
+    [["integrated"], "adjective", "with different parts connected and working together as one system", "combined, unified"],
+    [["comprising", "comprise"], "verb", "consisting of; made up of", "including, consisting of"],
+    [["principal"], "adjective", "main; most important", "chief, main, primary"],
+    [["new house starts", "house starts"], "noun", "new houses that begin to be built in a period of time", "new building projects"],
+    [["remanufacturing"], "noun", "making products again from used or partly processed materials", "reprocessing"],
+    [["accordingly"], "adverb", "for that reason; as a result", "therefore, consequently, so"],
+    [["export receipts", "receipts"], "noun", "money received, especially from sales", "earnings, income, revenue"],
+    [["exchange fluctuations", "fluctuations"], "noun", "changes up and down in the value of currencies", "currency changes, variations"],
+    [["shipping costs"], "noun", "the money paid to transport goods, especially by sea", "freight costs, transport costs"],
+    [["export sector"], "noun", "the part of the economy that sells goods to other countries", "export industry"],
+    [["capacity", "below its capacity"], "noun", "the most that something is able to produce", "potential, maximum output"],
+    [["value-added", "value-added products"], "adjective", "improved by extra processing so they can be sold for a higher price", "processed, finished"],
+    [["infrastructure"], "noun", "the basic systems a country needs, such as roads, ports and power", "facilities, transport networks"],
+    [["employing", "employ"], "verb", "giving work to people and paying them", "providing jobs for, hiring"],
+    [["workforce"], "noun", "all the people who work in an industry or country", "employees, workers, staff"],
+    [["competitive advantage"], "noun", "something that makes a country or company better than its rivals", "edge, strength"],
+    [["softwood", "softwoods"], "noun", "wood from coniferous trees such as pine; it usually grows quickly", "pine wood, conifer wood"],
+    [["renewable", "renewable forests"], "adjective", "able to be replaced naturally, for example by replanting", "replaceable, sustainable"],
+    [["source"], "verb", "to get something from a particular place", "obtain, get, supply"],
+    [["sustainability"], "noun", "using resources in a way that does not harm the environment, so they last into the future", "environmental responsibility, long-term use"],
+    [["southern hemisphere", "northern hemisphere", "hemisphere"], "noun", "one half of the Earth, north or south of the equator", "half of the world"],
+    [["scandinavian countries", "scandinavian"], "noun", "the countries of northern Europe: Norway, Sweden and Denmark (often Finland too)", "Nordic countries"],
+    [["plantation-style"], "adjective", "based on planted forests rather than natural ones", "farmed, planted"],
+    [["wood substitutes", "substitutes", "substitute"], "noun", "things used instead of something else", "alternatives, replacements"],
+    [["steel framing"], "noun", "the structure of a house made of steel instead of wood", "steel frames"],
+    [["underlines", "underline"], "verb", "shows clearly that something is important", "emphasises, highlights, stresses"]
+  ];
+
+  const normWord = s => s.toLowerCase().replace(/[’‘]/g, "'").replace(/[^a-z' -]+/g, ' ')
+                         .replace(/\s+/g, ' ').trim().replace(/^[' -]+|[' -]+$/g, '');
+  const VOCAB_MAP = new Map();
+  VOCAB.forEach(([forms, pos, meaning, similar]) => {
+    const entry = {word: forms[0], pos, meaning, similar};
+    forms.forEach(f => VOCAB_MAP.set(normWord(f), entry));
+  });
+  const VOCAB_KEYS = [...VOCAB_MAP.keys()].sort((a, b) => b.length - a.length);
+  function lookup(text){
+    const t = normWord(text || '');
+    if (!t) return null;
+    if (VOCAB_MAP.has(t)) return VOCAB_MAP.get(t);
+    // selection a little wider than the keyword, e.g. "the recalcitrant shells"
+    if (t.split(' ').length <= 6){
+      const padded = ' ' + t + ' ';
+      const k = VOCAB_KEYS.find(k => padded.includes(' ' + k + ' '));
+      if (k) return VOCAB_MAP.get(k);
+    }
+    return null;
+  }
+
+  const card = document.createElement('div');
+  card.className = 'vocab-card'; card.hidden = true; card.setAttribute('role', 'dialog');
+  document.body.appendChild(card);
+  function hideCard(){ card.hidden = true; }
+  function showMeaning(){
+    const r = usableRange();
+    let text, rect;
+    if (r){ text = r.toString(); rect = r.getBoundingClientRect(); }
+    else if (lastHighlight && lastHighlight.marks[0] && lastHighlight.marks[0].isConnected){
+      text = lastHighlight.text; rect = lastHighlight.marks[0].getBoundingClientRect();
+    }
+    const entry = lookup(text);
+    if (!entry){ hideCard(); return; }
+    card.innerHTML = `
+      <button type="button" class="vc-close" aria-label="Close">×</button>
+      <div class="vc-head"><span class="vc-word">${esc(entry.word)}</span><span class="vc-pos">${esc(entry.pos)}</span></div>
+      <div class="vc-meaning">${esc(entry.meaning)}</div>
+      ${entry.similar ? `<div class="vc-similar"><b>Similar:</b> ${esc(entry.similar)}</div>` : ''}`;
+    card.querySelector('.vc-close').onclick = hideCard;
+    card.hidden = false;
+    const w = card.offsetWidth, h = card.offsetHeight;
+    let left = rect.left + rect.width/2 - w/2 + window.scrollX;
+    left = Math.max(window.scrollX + 8, Math.min(left, window.scrollX + document.documentElement.clientWidth - w - 8));
+    let top = rect.bottom + window.scrollY + 12;
+    if (rect.bottom + h + 20 > window.innerHeight && rect.top - h - 12 > 70) top = rect.top + window.scrollY - h - 12;
+    card.style.left = left + 'px'; card.style.top = top + 'px';
+    pop.hidden = true; mpop.hidden = true;
+  }
+
+  // "Meaning" button next to the floating Highlight button, only for keywords
+  const mpop = document.createElement('button');
+  mpop.type = 'button'; mpop.className = 'hl-pop meaning'; mpop.textContent = 'Meaning'; mpop.hidden = true;
+  document.body.appendChild(mpop);
+  mpop.addEventListener('mousedown', e => e.preventDefault());
+  mpop.addEventListener('click', showMeaning);
+  new MutationObserver(() => {
+    const r = usableRange();
+    if (pop.hidden || !r || !lookup(r.toString())){ mpop.hidden = true; return; }
+    mpop.hidden = false;
+    mpop.style.top = pop.style.top;
+    mpop.style.left = (parseFloat(pop.style.left) + pop.offsetWidth + 6) + 'px';
+  }).observe(pop, {attributes: true, attributeFilter: ['hidden', 'style']});
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape'){ hideCard(); return; }
+    if ((e.key === 'm' || e.key === 'M') && !e.ctrlKey && !e.metaKey && !e.altKey &&
+        !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)){
+      if (!card.hidden && !usableRange()) hideCard(); else showMeaning();
+    }
+  });
+  document.addEventListener('mousedown', e => {
+    if (!card.hidden && !card.contains(e.target) && e.target !== mpop) hideCard();
+  });
+  document.querySelectorAll('.pane-passage').forEach(el => el.addEventListener('scroll', hideCard));
 
   // ---- zoom (text size) ----
   const ZMIN = 0.7, ZMAX = 2, ZSTEP = 0.1;

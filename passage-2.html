@@ -43,6 +43,17 @@ button,input{font:inherit}
 .zoom button:disabled{color:#bbb;cursor:default;background:#fff}
 .zoom-val{min-width:52px;text-align:center;font-size:13px;font-weight:700;border-left:1px solid var(--line);border-right:1px solid var(--line);line-height:34px;cursor:pointer}
 .hl-pop{position:absolute;z-index:30;background:var(--dark);color:#fff;border:0;border-radius:6px;padding:6px 12px;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.hl-pop.meaning{background:var(--red)}
+.hl-pop.meaning::after{border-top-color:var(--red)}
+.vocab-card{position:absolute;z-index:40;width:min(340px,calc(100vw - 16px));background:#fff;border:1px solid var(--line);border-top:3px solid var(--red);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.14);padding:12px 34px 12px 14px;font-size:calc(14px * var(--z));line-height:1.45}
+.vc-head{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+.vc-word{color:var(--red);font-weight:700;font-size:1.15em}
+.vc-pos{color:var(--muted);font-style:italic;font-size:.9em}
+.vc-meaning{color:var(--ink)}
+.vc-similar{color:var(--muted);font-size:.92em;margin-top:6px}
+.vc-similar b{color:var(--ink);font-weight:700}
+.vc-close{position:absolute;top:6px;right:8px;border:0;background:none;font-size:20px;line-height:1;color:var(--muted);cursor:pointer;padding:2px 4px}
+.vc-close:hover{color:var(--ink)}
 .hl-pop::after{content:"";position:absolute;left:50%;bottom:-5px;margin-left:-5px;border:5px solid transparent;border-bottom:0;border-top-color:var(--dark)}
 
 /* ---------- page / sheet ---------- */
@@ -409,7 +420,7 @@ button,input{font:inherit}
   const pop = document.createElement('button');
   pop.type = 'button'; pop.className = 'hl-pop'; pop.textContent = 'Highlight'; pop.hidden = true;
   document.body.appendChild(pop);
-  let lastRange = null;
+  let lastRange = null, lastHighlight = null;
 
   function usableRange(){
     const sel = window.getSelection();
@@ -422,6 +433,7 @@ button,input{font:inherit}
   function highlightSelection(){
     const range = usableRange() || lastRange;
     if (!range || range.collapsed) return;
+    const text = range.toString(), made = [];
     // wrap each selected text fragment in its own <mark>, skipping form controls
     const walker = document.createTreeWalker(sheet, NodeFilter.SHOW_TEXT, {
       acceptNode: n => range.intersectsNode(n) && n.nodeValue.trim() && !n.parentElement.closest(SKIP)
@@ -434,8 +446,9 @@ button,input{font:inherit}
       if (start >= end) return;
       const r = document.createRange(); r.setStart(node, start); r.setEnd(node, end);
       const m = document.createElement('mark'); m.title = 'Click to remove highlight';
-      r.surroundContents(m);
+      r.surroundContents(m); made.push(m);
     });
+    lastHighlight = {text, marks: made};
     window.getSelection().removeAllRanges();
     lastRange = null; pop.hidden = true;
   }
@@ -453,7 +466,7 @@ button,input{font:inherit}
     if (rect.top < 120) top = rect.bottom + window.scrollY + 10; // not enough room above (sticky bar)
     pop.style.left = left + 'px'; pop.style.top = top + 'px';
   }
-  document.addEventListener('mouseup', e => { if (e.target !== pop) setTimeout(placePopup, 0); });
+  document.addEventListener('mouseup', e => { if (!e.target.closest('.hl-pop, .vocab-card')) setTimeout(placePopup, 0); });
   document.addEventListener('touchend', () => setTimeout(placePopup, 250));
   document.addEventListener('selectionchange', () => { if (!usableRange()) pop.hidden = true; else lastRange = usableRange().cloneRange(); });
   document.querySelectorAll('.pane-passage').forEach(el => el.addEventListener('scroll', () => { pop.hidden = true; }));
@@ -471,6 +484,146 @@ button,input{font:inherit}
     const parent = m.parentNode;
     m.replaceWith(...m.childNodes); parent.normalize();
   });
+
+  // ---- vocabulary: keywords from the answer areas of the passage ----
+  // [forms that match a selection], part of speech, meaning, similar words
+  const VOCAB = [
+    [["maintained", "maintain"], "verb", "said firmly that something is true", "claimed, insisted, argued"],
+    [["acumen"], "noun", "the ability to understand and judge things quickly and well", "intelligence, sharpness, insight"],
+    [["exclusively", "exclusively human"], "adverb", "only; not shared with anyone or anything else", "solely, only, uniquely"],
+    [["deception"], "noun", "making someone believe something that is not true", "trickery, deceit, cheating"],
+    [["called into question", "call into question"], "phrase", "made people doubt whether something is true", "challenged, doubted"],
+    [["uniqueness"], "noun", "the quality of being the only one of its kind", "being one of a kind"],
+    [["reconsider"], "verb", "to think again about a belief and possibly change it", "rethink, review"],
+    [["ornithologists", "ornithologist"], "noun", "scientists who study birds", "bird experts"],
+    [["renowned"], "adjective", "famous and respected", "celebrated, well-known, famous"],
+    [["commonplace"], "adjective", "common; happening often", "ordinary, usual, widespread"],
+    [["grubs", "grub"], "noun", "young insects that look like small worms", "larvae, worms"],
+    [["catalogue"], "noun", "a complete list of things", "list, record"],
+    [["recalcitrant"], "adjective", "difficult to deal with; here: very hard to open", "stubborn, resistant, tough"],
+    [["insight"], "noun", "a deep understanding of a situation", "understanding, perception"],
+    [["bait"], "noun", "food used to attract an animal so that it can be caught", "lure, trap food"],
+    [["smouldering", "smoldering"], "adjective", "burning slowly with smoke but no flame", "slowly burning, glowing"],
+    [["subsequent"], "adjective", "happening after something else", "following, later, resulting"],
+    [["flee", "fled"], "verb", "to run away from danger", "escape, run away"],
+    [["feasts on", "feasts", "feast"], "verb", "eats a lot of something with great pleasure", "eats, devours"],
+    [["predominant"], "adjective", "main; most common or most important", "main, leading, dominant"],
+    [["necessity is the mother of invention"], "proverb", "when people really need something, they find a clever way to get it", ""],
+    [["energetically expensive"], "phrase", "using a lot of the body's energy", "costly in energy"],
+    [["hypothetical"], "adjective", "imagined as an example; not real", "imaginary, theoretical"],
+    [["erratically"], "adverb", "in an irregular way that is hard to predict", "unevenly, irregularly, randomly"],
+    [["reproduce"], "verb", "to produce young (babies)", "breed, have young"],
+    [["boast"], "verb", "(here) to have something impressive", "have, possess, own"],
+    [["fashion"], "verb", "to make something with your hands, often skilfully", "make, shape, create"],
+    [["serrated"], "adjective", "having a sharp edge with small teeth, like a saw or a bread knife", "saw-edged, jagged"],
+    [["probes", "probe"], "noun", "long thin tools used to reach into a narrow place", "pokers, sticks"],
+    [["moulted", "molted", "moult"], "adjective", "(of feathers) that have fallen off naturally", "shed, dropped"],
+    [["foraging", "forage"], "noun", "searching for food", "looking for food, gathering food"],
+    [["perch"], "noun", "a place where a bird sits or rests, such as a branch", "resting place, roost"],
+    [["innovative"], "adjective", "new and original", "creative, inventive, original"],
+    [["moulding", "molding", "mould"], "verb", "shaping a soft material into a particular form", "shaping, bending, forming"],
+    [["retrieve"], "verb", "to get something and bring it back", "fetch, get, obtain"],
+    [["collated"], "verb", "collected information together and arranged it", "gathered, compiled"],
+    [["innovations", "innovation"], "noun", "new ideas or new ways of doing things", "inventions, new solutions"],
+    [["forebrain"], "noun", "the front part of the brain, used for thinking and processing information", "front brain"],
+    [["hindbrain"], "noun", "the back part of the brain, which controls basic body functions", "back brain"],
+    [["higher-order", "higher-order information processing"], "adjective", "more complex or advanced", "advanced, complex"],
+    [["exploit"], "verb", "to use something to get an advantage from it", "make use of, take advantage of"],
+    [["communal living", "communal"], "noun", "living together in a group", "group living, community life"],
+    [["intentions"], "noun", "what someone plans or means to do", "aims, plans, purposes"],
+    [["selection"], "noun", "(in evolution) the process by which animals best suited to their environment survive", "natural selection"],
+    [["deceitful"], "adjective", "trying to trick other people", "dishonest, lying, tricky"],
+    [["cooperative breeders"], "noun", "animals that raise their young together as a group, with helpers", "group breeders"],
+    [["enthusiasm"], "noun", "a strong feeling of interest and eagerness", "eagerness, keenness"],
+    [["socially unacceptable"], "adjective", "not approved of by the group", "frowned upon, not allowed"],
+    [["deceptively", "act deceptively"], "adverb", "in a way that tricks others", "dishonestly, misleadingly"],
+    [["preening", "preen", "preened"], "verb", "cleaning and arranging feathers", "grooming, tidying"],
+    [["comically"], "adverb", "in a funny way", "funnily, amusingly"],
+    [["frantically"], "adverb", "very quickly, in a worried and hurried way", "wildly, desperately, hurriedly"],
+    [["social status"], "noun", "your position or importance within a group", "standing, rank, reputation"],
+    [["physiological"], "adjective", "relating to how the body and its organs work", "bodily, biological"],
+    [["cognitive ability", "cognitive"], "noun", "the ability to think, learn and understand", "intelligence, mental ability"],
+    [["long-held beliefs", "long-held"], "noun", "ideas that people have accepted for a long time", "traditional views, old beliefs"],
+    [["outer covering"], "noun", "the hard outside layer of something, such as a shell", "shell, casing, skin"],
+    [["unfamiliar"], "adjective", "not known or seen before", "new, strange, unknown"],
+    [["observers"], "noun", "people or animals who watch", "watchers, onlookers, spectators"]
+  ];
+
+  const normWord = s => s.toLowerCase().replace(/[’‘]/g, "'").replace(/[^a-z' -]+/g, ' ')
+                         .replace(/\s+/g, ' ').trim().replace(/^[' -]+|[' -]+$/g, '');
+  const VOCAB_MAP = new Map();
+  VOCAB.forEach(([forms, pos, meaning, similar]) => {
+    const entry = {word: forms[0], pos, meaning, similar};
+    forms.forEach(f => VOCAB_MAP.set(normWord(f), entry));
+  });
+  const VOCAB_KEYS = [...VOCAB_MAP.keys()].sort((a, b) => b.length - a.length);
+  function lookup(text){
+    const t = normWord(text || '');
+    if (!t) return null;
+    if (VOCAB_MAP.has(t)) return VOCAB_MAP.get(t);
+    // selection a little wider than the keyword, e.g. "the recalcitrant shells"
+    if (t.split(' ').length <= 6){
+      const padded = ' ' + t + ' ';
+      const k = VOCAB_KEYS.find(k => padded.includes(' ' + k + ' '));
+      if (k) return VOCAB_MAP.get(k);
+    }
+    return null;
+  }
+
+  const card = document.createElement('div');
+  card.className = 'vocab-card'; card.hidden = true; card.setAttribute('role', 'dialog');
+  document.body.appendChild(card);
+  function hideCard(){ card.hidden = true; }
+  function showMeaning(){
+    const r = usableRange();
+    let text, rect;
+    if (r){ text = r.toString(); rect = r.getBoundingClientRect(); }
+    else if (lastHighlight && lastHighlight.marks[0] && lastHighlight.marks[0].isConnected){
+      text = lastHighlight.text; rect = lastHighlight.marks[0].getBoundingClientRect();
+    }
+    const entry = lookup(text);
+    if (!entry){ hideCard(); return; }
+    card.innerHTML = `
+      <button type="button" class="vc-close" aria-label="Close">×</button>
+      <div class="vc-head"><span class="vc-word">${esc(entry.word)}</span><span class="vc-pos">${esc(entry.pos)}</span></div>
+      <div class="vc-meaning">${esc(entry.meaning)}</div>
+      ${entry.similar ? `<div class="vc-similar"><b>Similar:</b> ${esc(entry.similar)}</div>` : ''}`;
+    card.querySelector('.vc-close').onclick = hideCard;
+    card.hidden = false;
+    const w = card.offsetWidth, h = card.offsetHeight;
+    let left = rect.left + rect.width/2 - w/2 + window.scrollX;
+    left = Math.max(window.scrollX + 8, Math.min(left, window.scrollX + document.documentElement.clientWidth - w - 8));
+    let top = rect.bottom + window.scrollY + 12;
+    if (rect.bottom + h + 20 > window.innerHeight && rect.top - h - 12 > 70) top = rect.top + window.scrollY - h - 12;
+    card.style.left = left + 'px'; card.style.top = top + 'px';
+    pop.hidden = true; mpop.hidden = true;
+  }
+
+  // "Meaning" button next to the floating Highlight button, only for keywords
+  const mpop = document.createElement('button');
+  mpop.type = 'button'; mpop.className = 'hl-pop meaning'; mpop.textContent = 'Meaning'; mpop.hidden = true;
+  document.body.appendChild(mpop);
+  mpop.addEventListener('mousedown', e => e.preventDefault());
+  mpop.addEventListener('click', showMeaning);
+  new MutationObserver(() => {
+    const r = usableRange();
+    if (pop.hidden || !r || !lookup(r.toString())){ mpop.hidden = true; return; }
+    mpop.hidden = false;
+    mpop.style.top = pop.style.top;
+    mpop.style.left = (parseFloat(pop.style.left) + pop.offsetWidth + 6) + 'px';
+  }).observe(pop, {attributes: true, attributeFilter: ['hidden', 'style']});
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape'){ hideCard(); return; }
+    if ((e.key === 'm' || e.key === 'M') && !e.ctrlKey && !e.metaKey && !e.altKey &&
+        !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)){
+      if (!card.hidden && !usableRange()) hideCard(); else showMeaning();
+    }
+  });
+  document.addEventListener('mousedown', e => {
+    if (!card.hidden && !card.contains(e.target) && e.target !== mpop) hideCard();
+  });
+  document.querySelectorAll('.pane-passage').forEach(el => el.addEventListener('scroll', hideCard));
 
   // ---- zoom (text size) ----
   const ZMIN = 0.7, ZMAX = 2, ZSTEP = 0.1;
