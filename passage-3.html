@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Passage 3 – IELTS Reading</title>
+<style>
+:root{
+  --red:#e31e24;
+  --red-dark:#c4161c;
+  --ink:#222;
+  --muted:#6b7385;
+  --dark:#23262b;
+  --line:#d9d9d9;
+  --soft:#f2f2f2;
+  --ok:#1f8a4c;
+  --ok-bg:#e7f5ec;
+  --bad-bg:#fdecec;
+  --hl1:#fff176;
+  --hl2:#9be9a8;
+  --hl3:#9fd8ff;
+  --z:1;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;background:#e9e9ec;color:var(--ink);font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.55}
+button,input{font:inherit}
+
+/* ---------- sticky test bar ---------- */
+.testbar{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid var(--line);box-shadow:0 1px 4px rgba(0,0,0,.05)}
+.testbar-inner{max-width:1280px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.tb-title{font-weight:700;font-size:13px;letter-spacing:.06em;color:var(--muted);text-transform:uppercase}
+.tb-spacer{flex:1}
+.tb-progress{font-size:13px;color:var(--muted)}
+.tb-progress b{color:var(--ink)}
+.btn{border:0;border-radius:6px;padding:8px 16px;cursor:pointer;font-weight:700;font-size:14px}
+.btn-red{background:var(--red);color:#fff}
+.btn-red:hover{background:var(--red-dark)}
+.btn-ghost{background:#fff;color:var(--ink);border:1px solid var(--line)}
+.btn-ghost:hover{background:var(--soft)}
+.hl-set{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:6px;padding:4px 8px;background:#fff}
+.hl-set .lbl{font-size:12px;font-weight:700;color:var(--muted);margin-right:2px}
+.swatch{width:24px;height:24px;border-radius:50%;border:2px solid rgba(0,0,0,.15);cursor:pointer;padding:0;position:relative}
+.swatch:hover{transform:scale(1.12);border-color:rgba(0,0,0,.45)}
+.swatch[data-c="1"]{background:var(--hl1)}
+.swatch[data-c="2"]{background:var(--hl2)}
+.swatch[data-c="3"]{background:var(--hl3)}
+.swatch::after{content:attr(data-c);position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:rgba(0,0,0,.6)}
+.zoom{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.zoom button{border:0;background:#fff;width:34px;height:34px;font-size:18px;font-weight:700;cursor:pointer;color:var(--ink)}
+.zoom button:hover{background:var(--soft)}
+.zoom button:disabled{color:#bbb;cursor:default;background:#fff}
+.zoom-val{min-width:52px;text-align:center;font-size:13px;font-weight:700;border-left:1px solid var(--line);border-right:1px solid var(--line);line-height:34px;cursor:pointer}
+.hl-pop{position:absolute;z-index:30;background:var(--dark);color:#fff;border:0;border-radius:6px;padding:6px 12px;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.hl-pop.colors{display:flex;gap:8px;padding:6px 10px;cursor:default}
+.hl-pop.colors .swatch{border-color:rgba(255,255,255,.7)}
+.hl-pop.meaning{background:var(--red)}
+.hl-pop.meaning::after{border-top-color:var(--red)}
+.vocab-card{position:absolute;z-index:40;width:min(340px,calc(100vw - 16px));background:#fff;border:1px solid var(--line);border-top:3px solid var(--red);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.14);padding:12px 34px 12px 14px;font-size:calc(14px * var(--z));line-height:1.45}
+.vc-head{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+.vc-word{color:var(--red);font-weight:700;font-size:1.15em}
+.vc-pos{color:var(--muted);font-style:italic;font-size:.9em}
+.vc-meaning{color:var(--ink)}
+.vc-similar{color:var(--muted);font-size:.92em;margin-top:6px}
+.vc-similar b{color:var(--ink);font-weight:700}
+.vc-close{position:absolute;top:6px;right:8px;border:0;background:none;font-size:20px;line-height:1;color:var(--muted);cursor:pointer;padding:2px 4px}
+.vc-close:hover{color:var(--ink)}
+.hl-pop::after{content:"";position:absolute;left:50%;bottom:-5px;margin-left:-5px;border:5px solid transparent;border-bottom:0;border-top-color:var(--dark)}
+
+/* ---------- page / sheet ---------- */
+.wrap{max-width:1280px;margin:0 auto;padding:22px 16px 60px}
+.sheet{background:#fff;border-radius:4px;box-shadow:0 1px 3px rgba(0,0,0,.08);padding:28px 36px 30px}
+.running-head{text-align:right;font-size:calc(11px * var(--z));font-weight:700;letter-spacing:.04em;color:var(--muted);padding-bottom:12px;border-bottom:1.5px solid #555;margin-bottom:22px}
+
+.hero{background:var(--red);color:#fff;border-radius:12px;padding:22px 26px;display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+.hero h1{margin:0;font-size:calc(30px * var(--z));line-height:1.15}
+.hero .sub{font-size:calc(13px * var(--z));margin-top:4px;opacity:.95}
+.hero .right{text-align:right;font-size:calc(13px * var(--z))}
+.hero .right b{display:block;font-size:calc(13px * var(--z));margin-bottom:6px}
+
+.bar{background:var(--dark);color:#fff;font-weight:700;font-size:calc(12px * var(--z));letter-spacing:.03em;padding:7px 12px;margin:22px 0 10px}
+.instruct-muted{color:var(--muted);font-size:calc(12.5px * var(--z));margin:0 0 14px}
+
+.split{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:6px;align-items:start}
+.pane{min-width:0}
+.pane-passage{max-height:calc(100vh - 140px);overflow-y:auto;padding-right:14px;position:sticky;top:76px}
+.pane-passage::-webkit-scrollbar{width:8px}
+.pane-passage::-webkit-scrollbar-thumb{background:#ccc;border-radius:4px}
+
+.passage h2{font-size:calc(21px * var(--z));margin:4px 0 10px;line-height:1.3}
+.passage p{margin:0 0 11px;font-size:calc(14.5px * var(--z))}
+.passage .footnote{font-style:italic;color:var(--muted);font-size:calc(12px * var(--z))}
+.sheet mark{background:var(--hl1);color:var(--ink);padding:0 1px;border-radius:2px;cursor:pointer}
+.sheet mark[data-c="2"]{background:var(--hl2)}
+.sheet mark[data-c="3"]{background:var(--hl3)}
+
+.q-head{color:var(--red);font-size:calc(17px * var(--z));font-weight:700;margin:4px 0 6px}
+.q-block + .q-block{margin-top:30px}
+.q-intro{font-size:calc(14px * var(--z));margin:0 0 10px}
+
+.legend{width:100%;border-collapse:collapse;background:var(--soft);border:1px solid var(--line);font-size:calc(13px * var(--z));margin:4px 0 14px}
+.legend td{padding:5px 10px}
+.legend td:first-child{font-weight:700;width:1%;white-space:nowrap;padding-right:22px}
+
+.passage .lede{font-style:italic;color:var(--muted)}
+.passage .para-label{color:var(--red);font-weight:700;font-size:calc(12.5px * var(--z));margin:16px 0 3px}
+.list-box{border:1px solid #555;border-radius:2px;background:#fafafa;padding:12px 16px;margin:6px 0 12px;font-size:calc(13.5px * var(--z))}
+.list-box .lb-title{font-weight:700;margin-bottom:6px}
+.list-box ol{list-style:none;margin:0;padding:0}
+.list-box li{margin:2px 0}
+.list-box li b{color:var(--red);display:inline-block;min-width:32px}
+.ans-select{border:0;border-bottom:2px dotted #8a8a8a;background:transparent;padding:4px 22px 4px 4px;font-size:calc(14.5px * var(--z));font-weight:700;color:var(--ink);cursor:pointer;min-width:110px;max-width:100%}
+.ans-select:focus{outline:none;border-bottom:2px solid var(--red);background:#fff8f8}
+.q-row.inline{grid-template-columns:30px 1fr auto;align-items:center}
+.q-row.inline .q-ans{grid-column:auto;margin-top:0}
+.q-row.inline .feedback{grid-column:2 / -1}
+.passage table.dialogue{border-collapse:collapse;margin:2px 0 14px 18px;font-size:calc(14.5px * var(--z))}
+.dialogue th{text-align:left;font-weight:700;padding:3px 18px 3px 0;white-space:nowrap;vertical-align:top}
+.dialogue td{padding:3px 0}
+.list-box ol.cols{display:grid;grid-template-columns:repeat(3,1fr);gap:2px 14px}
+.summary-box{border:1px solid #555;border-radius:2px;padding:12px 16px 6px;margin:6px 0 12px;background:#fff}
+.sb-title{text-align:center;font-weight:700;margin-bottom:8px;font-size:calc(14.5px * var(--z))}
+.summary-box p{margin:0 0 8px;line-height:2.2;font-size:calc(14.5px * var(--z))}
+.sgap{display:inline-flex;align-items:center;gap:4px;white-space:nowrap;border-radius:4px;vertical-align:middle}
+.sg-num{color:var(--red)}
+.sgap .ans-select{min-width:64px}
+.sgap.correct{background:var(--ok-bg)}
+.sgap.wrong{background:var(--bad-bg)}
+.sg-fb{font-weight:700;font-size:.9em;padding-right:4px}
+.sg-fb.ok{color:var(--ok)}
+.sg-fb.no{color:var(--red-dark)}
+.mc{display:flex;flex-direction:column;gap:2px;margin-top:4px}
+.mc-opt{position:relative;display:flex;gap:10px;align-items:flex-start;padding:5px 8px;border:1px solid transparent;border-radius:6px;cursor:pointer;font-size:calc(14.5px * var(--z))}
+.mc-opt:hover{background:#f6f6f7}
+.mc-opt input{position:absolute;opacity:0;pointer-events:none}
+.mc-letter{flex:0 0 auto;width:24px;height:24px;border:1px solid #888;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:.8em;font-weight:700;margin-top:1px}
+.mc-opt input:checked + .mc-letter{background:var(--dark);border-color:var(--dark);color:#fff}
+.mc-opt:has(input:checked){border-color:#bbb;background:#f1f1f2}
+.mc-opt input:focus-visible + .mc-letter{outline:2px solid var(--red);outline-offset:2px}
+.q-row{display:grid;grid-template-columns:30px 1fr;gap:4px 10px;padding:10px 0;border-bottom:1px dashed #e4e4e4}
+.q-row:last-child{border-bottom:0}
+.q-num{color:var(--red);font-weight:700;padding-top:1px}
+.q-text{font-size:calc(14.5px * var(--z))}
+.q-ans{grid-column:2;margin-top:6px}
+
+.choices{display:flex;flex-wrap:wrap;gap:6px}
+.choice{position:relative}
+.choice input{position:absolute;opacity:0;pointer-events:none}
+.choice span{display:inline-block;padding:5px 12px;border:1px solid #bdbdbd;border-radius:5px;font-size:calc(12.5px * var(--z));font-weight:700;letter-spacing:.02em;cursor:pointer;background:#fff;user-select:none}
+.choice span:hover{border-color:var(--dark)}
+.choice input:checked + span{background:var(--dark);border-color:var(--dark);color:#fff}
+.choice input:focus-visible + span{outline:2px solid var(--red);outline-offset:2px}
+
+.gap{border:0;border-bottom:2px dotted #8a8a8a;background:transparent;padding:4px 2px;width:min(260px,100%);font-size:calc(14.5px * var(--z));font-weight:700;text-transform:uppercase;color:var(--ink)}
+.gap:focus{outline:none;border-bottom:2px solid var(--red);background:#fff8f8}
+
+.q-row.correct{background:var(--ok-bg)}
+.q-row.wrong{background:var(--bad-bg)}
+.q-row.correct,.q-row.wrong{border-radius:6px;padding-left:8px;padding-right:8px;border-bottom-color:transparent;margin-bottom:4px}
+.feedback{grid-column:2;font-size:calc(12.5px * var(--z));margin-top:6px;font-weight:700}
+.feedback .ok{color:var(--ok)}
+.feedback .no{color:var(--red-dark)}
+
+.end{text-align:center;color:var(--muted);font-weight:700;font-size:calc(12px * var(--z));letter-spacing:.04em;margin:30px 0 4px}
+.submit-row{display:flex;justify-content:center;gap:10px;margin-top:18px;flex-wrap:wrap}
+
+/* ---------- results / answer key ---------- */
+.results{margin-top:22px}
+.score-card{display:flex;align-items:center;gap:22px;flex-wrap:wrap;border:1px solid var(--line);border-radius:10px;padding:18px 22px;margin:18px 0 6px}
+.score-big{font-size:calc(40px * var(--z));font-weight:700;color:var(--red);line-height:1}
+.score-big small{font-size:calc(18px * var(--z));color:var(--muted)}
+.score-msg{font-size:calc(14px * var(--z));color:var(--muted)}
+.key-grid{display:grid;grid-template-columns:1fr 1fr;gap:26px;margin-top:20px}
+.key{width:100%;border-collapse:collapse;font-size:calc(13px * var(--z))}
+.key th{background:var(--dark);color:#fff;text-align:left;padding:8px 10px;font-size:calc(12.5px * var(--z))}
+.key td{border:1px solid #ddd;padding:9px 10px;font-weight:700;vertical-align:top}
+.key tr:nth-child(even) td{background:#f4f4f4}
+.key td:first-child{color:var(--red);width:48px}
+.key .yours{display:block;font-weight:400;font-size:calc(12px * var(--z));margin-top:2px}
+.key .yours.ok{color:var(--ok)}
+.key .yours.no{color:var(--red-dark)}
+.key .mark{float:right;font-size:calc(14px * var(--z))}
+
+.page-foot{text-align:right;color:var(--muted);font-size:calc(11px * var(--z));border-top:1px solid #ddd;margin-top:28px;padding-top:8px}
+
+
+/* ---------- presenter focus: the side under the mouse stays clear, the other fades ---------- */
+@media (hover:hover) and (pointer:fine){
+  /* a white veil fades the inactive side; highlights sit above it so they stay unchanged */
+  .passage,#questions{position:relative}
+  .passage::after,#questions::after{content:"";position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:1;transition:opacity .25s ease}
+  .split:hover .pane:not(:hover) .passage::after,.split:hover #questions:not(:hover)::after{opacity:.55}
+  .sheet mark{position:relative;z-index:2}
+  .passage p:not(.para-label):not(.hl-tip),.q-row:not(.correct):not(.wrong){border-radius:4px;transition:background-color .15s ease,box-shadow .15s ease}
+  .passage p:not(.para-label):hover,.summary-box:hover,.q-row:not(.correct):not(.wrong):hover{background:#f3f4f6;box-shadow:0 0 0 6px #f3f4f6}
+}
+.pane-passage{padding-left:8px}
+@media (max-width:900px){
+  .split{grid-template-columns:1fr}
+  .pane-passage{max-height:none;overflow:visible;position:static;padding-right:0}
+  .key-grid{grid-template-columns:1fr}
+}
+@media (max-width:560px){
+  .sheet{padding:20px 16px 24px}
+  .wrap{padding:12px 0 40px}
+  .sheet{border-radius:0}
+  .hero{padding:18px}
+  .hero h1{font-size:calc(24px * var(--z))}
+  .hero .right{text-align:left}
+  .tb-title{display:none}
+}
+@media print{
+  html,body{background:#fff}
+  .testbar,.submit-row{display:none}
+  .sheet{box-shadow:none}
+  .pane-passage{max-height:none;overflow:visible;position:static}
+  .split{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<div class="testbar">
+  <div class="testbar-inner">
+    <span class="tb-title">Passage 3 · Reading</span>
+    <span class="tb-spacer"></span>
+    <span class="tb-progress"><b id="answered">0</b> / 14 answered</span>
+    <div class="zoom" role="group" aria-label="Text size">
+      <button type="button" id="zoom-out" title="Zoom out (smaller text)" aria-label="Zoom out">−</button>
+      <span class="zoom-val" id="zoom-val" title="Reset to 100%">100%</span>
+      <button type="button" id="zoom-in" title="Zoom in (bigger text)" aria-label="Zoom in">+</button>
+    </div>
+    <div class="hl-set" role="group" aria-label="Highlight colours">
+      <span class="lbl">Highlight</span>
+      <button class="swatch" data-c="1" type="button" title="Yellow highlight (key 1 or H)" aria-label="Yellow highlight"></button>
+      <button class="swatch" data-c="2" type="button" title="Green highlight (key 2)" aria-label="Green highlight"></button>
+      <button class="swatch" data-c="3" type="button" title="Blue highlight (key 3)" aria-label="Blue highlight"></button>
+    </div>
+    <button class="btn btn-red" id="submit-top" type="button">Submit</button>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="sheet">
+    <div class="running-head">PASSAGE 3</div>
+
+    <div class="hero">
+      <div>
+        <h1>Passage 3</h1>
+        <div class="sub">Questions 27–40</div>
+      </div>
+      <div class="right">
+        <b>Reading Passage 3</b>
+        Time allowed: 20 minutes
+      </div>
+    </div>
+
+    <div id="test-area">
+      <div class="bar">READING PASSAGE 3</div>
+      <p class="instruct-muted">You should spend about 20 minutes on Questions 27–40, which are based on Reading Passage 3 below.</p>
+
+      <div class="split">
+        <!-- ===== PASSAGE ===== -->
+        <div class="pane pane-passage" id="passage-pane">
+          <div class="passage" id="passage">
+            <h2>Jean Piaget 1896–1980</h2>
+            <p class="lede">Seymour Papert looks at the work of the pioneering Swiss philosopher and psychologist.</p>
+
+            <p>Jean Piaget spent much of his professional life listening to children, watching children and poring over reports of researchers around the world who were doing the same. He found, to put it most succinctly, that children don’t think like grown-ups. After thousands of interactions with young people often barely old enough to talk, Piaget began to suspect that behind their cute and seemingly irrational utterances were thought processes that had their own kind of order and their own special logic. Einstein called it a discovery so simple that only a genius could have thought of it.</p>
+
+            <p>Although not an educational reformer, Piaget championed a way of thinking about children that provided the foundation for today’s education-reform movements. It was a shift comparable to the way modern anthropology displaced stories of primitive tribes being ‘noble savages’ and ‘cannibals’. One might say that Piaget was the first to take children’s thinking seriously.</p>
+
+            <p>He has been revered by generations of teachers inspired by the belief that children are not empty vessels to be filled with knowledge (as traditional pedagogical theory had it) but active builders of knowledge—little scientists who are constantly creating and testing their own hypotheses about the world. And though he may not be as famous as Sigmund Freud or even B F Skinner, his influence on psychology may be longer lasting.</p>
+
+            <p>In 1920, while doing research in a child-psychology laboratory in Paris, Piaget noticed that children of the same age made similar errors on intelligence tests. Fascinated by their reasoning processes, he began to suspect that the key to human knowledge might be discovered by observing how the child’s mind develops. On his return to Switzerland he began watching children play, scrupulously recording their words and actions as their minds raced to find reasons for why things are the way they are. In one of his most famous experiments, Piaget asked children, ‘What makes the wind?’. A typical dialogue would be:</p>
+
+            <table class="dialogue">
+              <tr><th>Piaget:</th><td>What makes the wind?</td></tr>
+              <tr><th>Julia:</th><td>The trees.</td></tr>
+              <tr><th>Piaget:</th><td>How do you know?</td></tr>
+              <tr><th>Julia:</th><td>I saw them waving their arms.</td></tr>
+              <tr><th>Piaget:</th><td>How does that make the wind?</td></tr>
+              <tr><th>Julia:</th><td>(waving her hand in front of his face): Like this. Only they are bigger. And there are lots of trees.</td></tr>
+            </table>
+
+            <p>Piaget recognised that five-year-old Julia’s beliefs, while not correct by any adult criterion, are not ‘incorrect’ either. They are entirely sensible and coherent within the framework of the child’s way of knowing. Classifying them as ‘true’ or ‘false’ misses the point and shows a lack of respect for the child. What Piaget was after was a theory that the wind dialogue demonstrated coherence, ingenuity and the practice of a kind of explanatory principle (in this case by referring to body actions) that stands young children in very good stead when they don’t know enough or don’t have enough skill to handle the kind of explanation that grown-ups prefer.</p>
+
+            <p>Piaget was not an educator and never laid down rules about how to intervene in such situations. But his work strongly suggests that the automatic reaction of putting the child right may well be counter-productive. If their theories are always greeted by ‘Nice try, but this is how it really is…’ they might give up after a while on making theories. As Piaget put it, ‘children have real understanding only of that which they invent themselves, and each time that we try to teach them something too quickly, we keep them from inventing it themselves.’</p>
+
+            <p>Disciples of Piaget have a tolerance for—indeed a fascination with—children’s primitive laws of physics: that things disappear when they are out of sight; that the moon and the sun follow you around; that big things float and small things sink. Einstein was intrigued by Piaget’s findings, especially by the idea that seven-year-olds insist that going faster can take more time—perhaps because this, like Einstein’s own theories of relativity, runs so contrary to common sense.</p>
+
+            <p>Although every teacher in training still memorises Piaget’s successive stages of childhood development, the greater part of Piaget’s work is less well known, perhaps because schools of education regard it as ‘too deep’ for teachers. Piaget never thought of himself as a child psychologist. His real interest was epistemology—the theory of knowledge—which, like physics, was considered a branch of philosophy until Piaget came along and made it a science.</p>
+
+            <p>Through epistemology, Piaget explored multiple ways of knowing. He acknowledged them and examined them non-judgementally, yet with a philosopher’s analytic rigour. Since Piaget, the territory has been widely colonised by those who write about women’s ways of knowing, Afrocentric ways of knowing, even the computer’s ways of knowing. Indeed, artificial intelligence and the information-processing model of the mind owe more to Piaget than its proponents may realise.</p>
+
+            <p>The core of Piaget is his belief that looking carefully at how knowledge develops in children will elucidate the nature of knowledge in general. Whether this has in fact led to deeper understanding remains, like everything about Piaget, controversial. In the past decade, Piaget has been vigorously challenged by the current fashion of viewing knowledge as an intrinsic property of the brain. Ingenious experiments have demonstrated that newborn infants already have some of the knowledge that Piaget believed children constructed. But for those, like me, who still see Piaget as the giant in the field of cognitive theory, the difference between what the baby brings and what the adult has is so immense that the new discoveries do not significantly reduce the gap, but only increase the mystery.</p>
+          </div>
+        </div>
+
+        <!-- ===== QUESTIONS ===== -->
+        <div class="pane" id="questions">
+          <div class="q-block">
+            <div class="q-head">Questions 27–31</div>
+            <p class="q-intro">Choose the correct letter, <b>A</b>, <b>B</b>, <b>C</b> or <b>D</b>.</p>
+            <div id="mc-qs"></div>
+          </div>
+
+          <div class="q-block">
+            <div class="q-head">Questions 32–36</div>
+            <p class="q-intro">Complete the summary using the list of words, <b>A–I</b>, below.</p>
+            <div class="list-box">
+              <div class="lb-title">Options</div>
+              <ol class="cols" id="bank-list"></ol>
+            </div>
+            <div class="summary-box">
+              <div class="sb-title">Piaget’s Theories on Children’s Cognitive Development</div>
+              <p id="summary-text"></p>
+            </div>
+          </div>
+
+          <div class="q-block">
+            <div class="q-head">Questions 37–40</div>
+            <p class="q-intro">Do the following statements agree with the claims of the writer in Reading Passage 3?<br>In boxes 37–40 write</p>
+            <table class="legend">
+              <tr><td>YES</td><td>if the statement agrees with the claims of the writer</td></tr>
+              <tr><td>NO</td><td>if the statement contradicts the claims of the writer</td></tr>
+              <tr><td>NOT GIVEN</td><td>if it is impossible to say what the writer thinks about this</td></tr>
+            </table>
+            <div id="yn-qs"></div>
+          </div>
+
+          <div class="end">END OF READING TEST</div>
+          <div class="submit-row">
+            <button class="btn btn-red" id="submit-bottom" type="button">Submit answers</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== RESULTS ===== -->
+    <div class="results" id="results" hidden>
+      <div class="bar">ANSWER KEY</div>
+      <div class="score-card">
+        <div class="score-big"><span id="score">0</span><small> / 14</small></div>
+        <div>
+          <div style="font-weight:700" id="score-title"></div>
+          <div class="score-msg" id="score-msg"></div>
+        </div>
+        <span class="tb-spacer"></span>
+        <button class="btn btn-ghost" id="review-btn" type="button">Review in passage</button>
+        <button class="btn btn-red" id="retry-btn" type="button">Try again</button>
+      </div>
+      <div class="key-grid">
+        <table class="key"><thead><tr><th>No.</th><th>Answer</th></tr></thead><tbody id="key-a"></tbody></table>
+        <table class="key"><thead><tr><th>No.</th><th>Answer</th></tr></thead><tbody id="key-b"></tbody></table>
+      </div>
+    </div>
+
+    <div class="page-foot">IELTS Reading Practice · Passage 3</div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const MC = [
+    {n:27, text:"In the second paragraph the writer mentions the example of modern anthropology to illustrate", key:"C", opts:[
+      ["A","the universality of Piaget’s insights into the workings of the mind."],
+      ["B","the similarity between children’s thought processing in different cultures."],
+      ["C","how Piaget’s work represents a crucial turning-point in our approach to education."],
+      ["D","how Piaget’s work has aided our understanding of man’s evolution from primitive origins."]]},
+    {n:28, text:"According to the writer, what point is illustrated by the dialogue about the wind?", key:"A", opts:[
+      ["A","The factual accuracy of what children say is of minor significance."],
+      ["B","Children want to learn about scientific principles."],
+      ["C","Children’s reasoning processes can be amusing to adults."],
+      ["D","Children often pretend that they know the answers to questions."]]},
+    {n:29, text:"Piaget believed in the importance of", key:"D", opts:[
+      ["A","preventing children from making false assumptions."],
+      ["B","giving children honest feedback on their hypotheses."],
+      ["C","showing children how to formulate their own ideas about the world."],
+      ["D","maintaining children’s confidence in their ability to interpret the world."]]},
+    {n:30, text:"What does the writer suggest in the seventh paragraph?", key:"C", opts:[
+      ["A","Children’s sense of their surroundings changes as they get older."],
+      ["B","Children are able to grasp certain complex ideas as well as adults are."],
+      ["C","Even apparently irrational ideas can be worthy of interest."],
+      ["D","Sometimes the simplest explanations are the best."]]},
+    {n:31, text:"The writer’s main purpose is to", key:"C", opts:[
+      ["A","outline Piaget’s contribution to a range of scientific fields."],
+      ["B","summarise how education has benefited from Piaget’s findings."],
+      ["C","discuss Piaget’s role in the development of 20th-century psychology."],
+      ["D","express doubts about a number of Piaget’s theories."]]}
+  ];
+  const BANK = [["A","correct"],["B","theories"],["C","brain"],["D","simple"],["E","teachers"],["F","psychology"],["G","logical"],["H","thought"],["I","philosophers"]];
+  const SUM = [
+    {n:32, key:"G"}, {n:33, key:"B"}, {n:34, key:"F"}, {n:35, key:"C"}, {n:36, key:"E"}
+  ];
+  const YN = [
+    {n:37, text:"Piaget’s early work in Paris involved innovative research techniques.", key:"NOT GIVEN"},
+    {n:38, text:"Piaget gave clear guidelines as to how adults should give information to children.", key:"NO"},
+    {n:39, text:"Piaget made a significant contribution to the field of epistemology.", key:"YES"},
+    {n:40, text:"We still have much to learn about the nature of knowledge.", key:"NOT GIVEN"}
+  ];
+  const ALL = MC.concat(SUM, YN);
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  // ---- render questions ----
+  $('mc-qs').innerHTML = MC.map(q => `
+    <div class="q-row" id="row${q.n}">
+      <div class="q-num">${q.n}</div>
+      <div class="q-text">${esc(q.text)}</div>
+      <div class="q-ans mc" role="radiogroup" aria-label="Question ${q.n}">
+        ${q.opts.map(([k, t]) => `
+          <label class="mc-opt"><input type="radio" name="q${q.n}" value="${k}"><span class="mc-letter">${k}</span><span class="mc-text">${esc(t)}</span></label>`).join('')}
+      </div>
+    </div>`).join('');
+
+  $('bank-list').innerHTML = BANK.map(([k, t]) => `<li><b>${k}</b>${esc(t)}</li>`).join('');
+  const gap = n => `<span class="sgap" id="row${n}"><b class="sg-num">${n}</b><select class="ans-select" id="q${n}" aria-label="Answer ${n}"><option value=""></option>${BANK.map(([k]) => `<option value="${k}">${k}</option>`).join('')}</select></span>`;
+  $('summary-text').innerHTML =
+    `Piaget maintained that children’s mental processes were far more ${gap(32)} than they might appear. He encouraged the view that a child was not a ‘blank slate’ waiting to be filled with information, but rather a systematic builder of knowledge who regularly tries out his or her own ${gap(33)} about the world. Piaget’s impact on the area of ${gap(34)} could well outlast that of more celebrated pioneers of this discipline. Despite doubts cast over his ideas by the current view associating knowledge exclusively with the ${gap(35)}, the effects of his work are still strong today. His principles are still widely used in the professional development of ${gap(36)}.`;
+
+  $('yn-qs').innerHTML = YN.map(q => `
+    <div class="q-row" id="row${q.n}">
+      <div class="q-num">${q.n}</div>
+      <div class="q-text">${esc(q.text)}</div>
+      <div class="q-ans choices" role="radiogroup" aria-label="Question ${q.n}">
+        ${["YES","NO","NOT GIVEN"].map(v => `
+          <label class="choice"><input type="radio" name="q${q.n}" value="${v}"><span>${v}</span></label>`).join('')}
+      </div>
+    </div>`).join('');
+
+  // ---- answers ----
+  function getAnswer(q){
+    const sel = $('q' + q.n);
+    if (sel) return sel.value;
+    const c = document.querySelector(`input[name="q${q.n}"]:checked`);
+    return c ? c.value : '';
+  }
+  const isCorrect = (q, a) => !!a && a === q.key;
+
+  function updateCount(){
+    const c = ALL.filter(q => getAnswer(q) !== '').length;
+    $('answered').textContent = c;
+  }
+  document.getElementById('questions').addEventListener('input', updateCount);
+  document.getElementById('questions').addEventListener('change', updateCount);
+
+  let submitted = false;
+
+  // ---- submit ----
+  function submit(){
+    if (submitted) return;
+    const left = ALL.length - ALL.filter(q => getAnswer(q) !== '').length;
+    if (left > 0 && !confirm(`You have ${left} unanswered question${left>1?'s':''}. Submit anyway?`)) return;
+    submitted = true;
+    let score = 0;
+    const rows = ALL.map(q => {
+      const a = getAnswer(q), ok = isCorrect(q, a);
+      if (ok) score++;
+      const row = $('row'+q.n);
+      row.classList.add(ok ? 'correct' : 'wrong');
+      const fb = document.createElement(row.classList.contains('sgap') ? 'span' : 'div');
+      fb.className = row.classList.contains('sgap') ? 'sg-fb ' + (ok ? 'ok' : 'no') : 'feedback';
+      fb.innerHTML = row.classList.contains('sgap')
+        ? (ok ? '✓' : '✗ ' + esc(q.key))
+        : (ok ? `<span class="ok">✓ Correct</span>`
+              : `<span class="no">✗ ${a ? 'Your answer: '+esc(a.toUpperCase())+' · ' : 'Not answered · '}Correct: ${esc(q.key.toUpperCase())}</span>`);
+      row.appendChild(fb);
+      return `<tr><td>${q.n}</td><td>${esc(q.key.toUpperCase())}<span class="mark">${ok?'✓':'✗'}</span>
+              <span class="yours ${ok?'ok':'no'}">Your answer: ${a ? esc(a.toUpperCase()) : '—'}</span></td></tr>`;
+    });
+    $('key-a').innerHTML = rows.slice(0,7).join('');
+    $('key-b').innerHTML = rows.slice(7).join('');
+    document.querySelectorAll('#questions input, #questions select').forEach(i => i.disabled = true);
+    $('score').textContent = score;
+    $('score-title').textContent = "Test submitted.";
+    $('score-msg').textContent = score >= Math.round(ALL.length * .85) ? "Excellent work!" : score >= Math.round(ALL.length * .6) ? "Good effort — review the ones you missed." : "Keep practising — check the answer key and find each answer in the passage.";
+    $('submit-top').disabled = true; $('submit-top').style.opacity = .5;
+    $('submit-bottom').parentElement.hidden = true;
+    $('results').hidden = false;
+    $('results').scrollIntoView({behavior:'smooth', block:'start'});
+  }
+  $('submit-top').onclick = () => submit();
+  $('submit-bottom').onclick = () => submit();
+  $('review-btn').onclick = () => $('test-area').scrollIntoView({behavior:'smooth'});
+  $('retry-btn').onclick = () => {
+    if (!confirm('Clear all answers and start again?')) return;
+    submitted = false;
+    document.querySelectorAll('#questions input, #questions select').forEach(i => { i.disabled = false; if (i.type === 'radio') i.checked = false; else i.value = ''; });
+    document.querySelectorAll('.q-row, .sgap').forEach(r => { r.classList.remove('correct','wrong'); r.querySelectorAll('.feedback, .sg-fb').forEach(f => f.remove()); });
+    $('results').hidden = true;
+    $('submit-top').disabled = false; $('submit-top').style.opacity = 1;
+    $('submit-bottom').parentElement.hidden = false;
+    updateCount();
+    window.scrollTo({top:0, behavior:'smooth'});
+  };
+
+  // ---- highlighting (whole test sheet: passage, instructions, questions, results) ----
+  const sheet = document.querySelector('.sheet');
+  const SKIP = 'input, button, textarea, select, .choice, mark, script, style';
+  const pop = document.createElement('div');
+  pop.className = 'hl-pop colors'; pop.hidden = true;
+  pop.innerHTML = '<button class="swatch" data-c="1" type="button" title="Yellow (1)" aria-label="Yellow highlight"></button><button class="swatch" data-c="2" type="button" title="Green (2)" aria-label="Green highlight"></button><button class="swatch" data-c="3" type="button" title="Blue (3)" aria-label="Blue highlight"></button>';
+  document.body.appendChild(pop);
+  let lastRange = null, lastHighlight = null;
+
+  function usableRange(){
+    const sel = window.getSelection();
+    if (sel && !sel.isCollapsed && sel.rangeCount){
+      const r = sel.getRangeAt(0);
+      if (sheet.contains(r.commonAncestorContainer)) return r;
+    }
+    return null;
+  }
+  function highlightSelection(color){
+    color = color || '1';
+    const range = usableRange() || lastRange;
+    if (!range || range.collapsed) return;
+    const text = range.toString(), made = [];
+    // wrap each selected text fragment in its own <mark>, skipping form controls
+    const walker = document.createTreeWalker(sheet, NodeFilter.SHOW_TEXT, {
+      acceptNode: n => range.intersectsNode(n) && n.nodeValue.trim() && !n.parentElement.closest(SKIP)
+        ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT
+    });
+    const nodes = []; while (walker.nextNode()) nodes.push(walker.currentNode);
+    nodes.forEach(node => {
+      const start = node === range.startContainer ? range.startOffset : 0;
+      const end = node === range.endContainer ? range.endOffset : node.nodeValue.length;
+      if (start >= end) return;
+      const r = document.createRange(); r.setStart(node, start); r.setEnd(node, end);
+      const m = document.createElement('mark'); m.title = 'Click to remove highlight'; m.dataset.c = color;
+      r.surroundContents(m); made.push(m);
+    });
+    lastHighlight = {text, marks: made};
+    window.getSelection().removeAllRanges();
+    lastRange = null; pop.hidden = true;
+  }
+  function placePopup(){
+    const r = usableRange();
+    if (!r){ pop.hidden = true; return; }
+    lastRange = r.cloneRange();
+    const rect = r.getBoundingClientRect();
+    if (!rect.width && !rect.height){ pop.hidden = true; return; }
+    pop.hidden = false;
+    const w = pop.offsetWidth, h = pop.offsetHeight;
+    let left = rect.left + rect.width/2 - w/2 + window.scrollX;
+    left = Math.max(window.scrollX + 8, Math.min(left, window.scrollX + document.documentElement.clientWidth - w - 8));
+    let top = rect.top + window.scrollY - h - 10;
+    if (rect.top < 120) top = rect.bottom + window.scrollY + 10; // not enough room above (sticky bar)
+    pop.style.left = left + 'px'; pop.style.top = top + 'px';
+  }
+  document.addEventListener('mouseup', e => { if (!e.target.closest('.hl-pop, .vocab-card')) setTimeout(placePopup, 0); });
+  document.addEventListener('touchend', () => setTimeout(placePopup, 250));
+  document.addEventListener('selectionchange', () => { if (!usableRange()) pop.hidden = true; else lastRange = usableRange().cloneRange(); });
+  document.querySelectorAll('.pane-passage').forEach(el => el.addEventListener('scroll', () => { pop.hidden = true; }));
+  document.querySelectorAll('.swatch').forEach(b => {
+    b.addEventListener('mousedown', e => e.preventDefault()); // keep the selection
+    b.addEventListener('click', () => highlightSelection(b.dataset.c));
+  });
+  document.addEventListener('keydown', e => {
+    if (e.ctrlKey || e.metaKey || e.altKey || /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return;
+    const c = {'1':'1','2':'2','3':'3','h':'1','H':'1'}[e.key];
+    if (c) highlightSelection(c);
+  });
+  sheet.addEventListener('click', e => {
+    const m = e.target.closest('mark');
+    if (!m || !window.getSelection().isCollapsed) return;
+    const parent = m.parentNode;
+    m.replaceWith(...m.childNodes); parent.normalize();
+  });
+
+  // ---- vocabulary: keywords from the answer areas of the passage ----
+  // [forms that match a selection], part of speech, meaning, similar words
+  const VOCAB = [
+    [["poring over", "pore over"], "phrase", "reading or studying something very carefully", "studying, examining, scrutinising"],
+    [["succinctly"], "adverb", "in a short and clear way, using few words", "briefly, concisely"],
+    [["utterances", "utterance"], "noun", "things that someone says", "words, remarks, statements"],
+    [["irrational"], "adjective", "not based on clear thinking or reason", "illogical, unreasonable"],
+    [["pioneering"], "adjective", "being among the first to do something new", "groundbreaking, innovative"],
+    [["championed", "champion"], "verb", "strongly supported an idea or cause", "supported, promoted, defended"],
+    [["foundation"], "noun", "the basic idea or base that something else is built on", "basis, groundwork"],
+    [["displaced", "displace"], "verb", "took the place of something", "replaced, supplanted"],
+    [["anthropology"], "noun", "the study of human beings, their societies and cultures", "study of humankind"],
+    [["primitive"], "adjective", "very simple, belonging to an early stage of development", "basic, early, simple"],
+    [["revered", "revere"], "verb", "respected and admired very much", "admired, respected, honoured"],
+    [["pedagogical", "pedagogical theory"], "adjective", "relating to the methods and theory of teaching", "teaching-related, educational"],
+    [["hypotheses", "hypothesis"], "noun", "ideas or explanations that are not yet proved and can be tested", "theories, ideas, guesses"],
+    [["scrupulously"], "adverb", "very carefully, paying attention to every detail", "meticulously, carefully, thoroughly"],
+    [["criterion"], "noun", "a standard used for judging something", "standard, measure, test"],
+    [["coherent", "coherence"], "adjective", "logical and consistent, so that all the parts fit together and make sense", "logical, consistent, clear"],
+    [["ingenuity"], "noun", "cleverness and originality in solving problems", "inventiveness, cleverness, creativity"],
+    [["explanatory principle"], "noun", "a basic idea used to explain why something happens", "basic explanation"],
+    [["stands young children in very good stead", "in good stead", "stead"], "idiom", "is very useful or helpful to them", "serves them well, benefits them"],
+    [["intervene"], "verb", "to become involved in a situation in order to change it", "step in, interfere, get involved"],
+    [["putting the child right", "put the child right"], "phrase", "correcting a child when they are wrong", "correcting, setting straight"],
+    [["counter-productive", "counterproductive"], "adjective", "having the opposite effect to the one you want", "self-defeating, harmful"],
+    [["disciples", "disciple"], "noun", "followers of a teacher or a set of ideas", "followers, supporters, admirers"],
+    [["tolerance"], "noun", "willingness to accept ideas or behaviour you may not agree with", "acceptance, open-mindedness"],
+    [["intrigued", "intrigue"], "adjective", "very interested and curious", "fascinated, curious"],
+    [["relativity"], "noun", "Einstein's scientific theory about space, time and movement", ""],
+    [["contrary to common sense"], "phrase", "the opposite of what seems obvious or sensible", "against logic, counter-intuitive"],
+    [["successive"], "adjective", "following one after another in order", "consecutive, in sequence"],
+    [["epistemology"], "noun", "the study of knowledge: what it is and how we come to know things", "theory of knowledge"],
+    [["non-judgementally", "non-judgmentally"], "adverb", "without deciding in advance whether something is good or bad", "neutrally, openly"],
+    [["analytic rigour", "rigour"], "noun", "very careful, strict and thorough examination", "thoroughness, precision, strictness"],
+    [["colonised", "colonized"], "verb", "(here) spread into and taken over an area of study", "occupied, taken over"],
+    [["proponents", "proponent"], "noun", "people who support an idea or theory", "supporters, advocates"],
+    [["elucidate"], "verb", "to make something clear and easy to understand", "explain, clarify, illuminate"],
+    [["controversial"], "adjective", "causing a lot of disagreement and argument", "disputed, debatable"],
+    [["vigorously"], "adverb", "with a lot of energy and force", "strongly, forcefully, energetically"],
+    [["intrinsic"], "adjective", "belonging naturally to something; built in from the start", "inherent, innate, natural"],
+    [["ingenious"], "adjective", "very clever and original", "clever, inventive, brilliant"],
+    [["newborn infants", "newborn", "infants"], "noun", "babies who have only just been born", "babies"],
+    [["cognitive theory", "cognitive"], "adjective", "relating to thinking, learning and understanding", "mental, intellectual"],
+    [["immense"], "adjective", "extremely large", "huge, enormous, vast"],
+    [["systematic"], "adjective", "done in an organised way, following a plan or method", "organised, methodical"],
+    [["blank slate"], "noun", "a mind with no ideas or knowledge in it at the start", "empty mind"],
+    [["celebrated"], "adjective", "famous and admired", "famous, renowned, well-known"],
+    [["professional development"], "noun", "training and learning that people do to improve at their job", "career training"],
+    [["maintained", "maintain"], "verb", "said firmly that something is true", "claimed, insisted, argued"],
+    [["universality"], "noun", "being true or true for everyone, everywhere", "being universal"],
+    [["formulate"], "verb", "to create and express an idea carefully", "develop, form, put together"],
+    [["interpret"], "verb", "to explain the meaning of something or decide what it means", "understand, make sense of"],
+    [["assumptions", "assumption"], "noun", "things you accept as true without proof", "beliefs, guesses"],
+    [["of minor significance", "minor significance"], "phrase", "not very important", "unimportant, trivial"],
+    [["grasp"], "verb", "to understand something", "understand, comprehend"],
+    [["innovative research techniques", "innovative"], "adjective", "new and original", "creative, original, new"],
+    [["guidelines"], "noun", "rules or advice about how to do something", "instructions, rules, advice"],
+    [["contribution"], "noun", "something you give or do that helps to achieve something", "input, part, effort"],
+    [["significant"], "adjective", "important or large enough to have an effect", "major, important, notable"]
+  ];
+
+  const normWord = s => s.toLowerCase().replace(/[’‘]/g, "'").replace(/[^a-z' -]+/g, ' ')
+                         .replace(/\s+/g, ' ').trim().replace(/^[' -]+|[' -]+$/g, '');
+  const VOCAB_MAP = new Map();
+  VOCAB.forEach(([forms, pos, meaning, similar]) => {
+    const entry = {word: forms[0], pos, meaning, similar};
+    forms.forEach(f => VOCAB_MAP.set(normWord(f), entry));
+  });
+  const VOCAB_KEYS = [...VOCAB_MAP.keys()].sort((a, b) => b.length - a.length);
+  function lookup(text){
+    const t = normWord(text || '');
+    if (!t) return null;
+    if (VOCAB_MAP.has(t)) return VOCAB_MAP.get(t);
+    // selection a little wider than the keyword, e.g. "the recalcitrant shells"
+    if (t.split(' ').length <= 6){
+      const padded = ' ' + t + ' ';
+      const k = VOCAB_KEYS.find(k => padded.includes(' ' + k + ' '));
+      if (k) return VOCAB_MAP.get(k);
+    }
+    return null;
+  }
+
+  const card = document.createElement('div');
+  card.className = 'vocab-card'; card.hidden = true; card.setAttribute('role', 'dialog');
+  document.body.appendChild(card);
+  function hideCard(){ card.hidden = true; }
+  function showMeaning(){
+    const r = usableRange();
+    let text, rect;
+    if (r){ text = r.toString(); rect = r.getBoundingClientRect(); }
+    else if (lastHighlight && lastHighlight.marks[0] && lastHighlight.marks[0].isConnected){
+      text = lastHighlight.text; rect = lastHighlight.marks[0].getBoundingClientRect();
+    }
+    const entry = lookup(text);
+    if (!entry){ hideCard(); return; }
+    card.innerHTML = `
+      <button type="button" class="vc-close" aria-label="Close">×</button>
+      <div class="vc-head"><span class="vc-word">${esc(entry.word)}</span><span class="vc-pos">${esc(entry.pos)}</span></div>
+      <div class="vc-meaning">${esc(entry.meaning)}</div>
+      ${entry.similar ? `<div class="vc-similar"><b>Similar:</b> ${esc(entry.similar)}</div>` : ''}`;
+    card.querySelector('.vc-close').onclick = hideCard;
+    card.hidden = false;
+    const w = card.offsetWidth, h = card.offsetHeight;
+    let left = rect.left + rect.width/2 - w/2 + window.scrollX;
+    left = Math.max(window.scrollX + 8, Math.min(left, window.scrollX + document.documentElement.clientWidth - w - 8));
+    let top = rect.bottom + window.scrollY + 12;
+    if (rect.bottom + h + 20 > window.innerHeight && rect.top - h - 12 > 70) top = rect.top + window.scrollY - h - 12;
+    card.style.left = left + 'px'; card.style.top = top + 'px';
+    pop.hidden = true; mpop.hidden = true;
+  }
+
+  // "Meaning" button next to the floating Highlight button, only for keywords
+  const mpop = document.createElement('button');
+  mpop.type = 'button'; mpop.className = 'hl-pop meaning'; mpop.textContent = 'Meaning'; mpop.hidden = true;
+  document.body.appendChild(mpop);
+  mpop.addEventListener('mousedown', e => e.preventDefault());
+  mpop.addEventListener('click', showMeaning);
+  new MutationObserver(() => {
+    const r = usableRange();
+    if (pop.hidden || !r || !lookup(r.toString())){ mpop.hidden = true; return; }
+    mpop.hidden = false;
+    mpop.style.top = pop.style.top;
+    mpop.style.left = (parseFloat(pop.style.left) + pop.offsetWidth + 6) + 'px';
+  }).observe(pop, {attributes: true, attributeFilter: ['hidden', 'style']});
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape'){ hideCard(); return; }
+    if ((e.key === 'm' || e.key === 'M') && !e.ctrlKey && !e.metaKey && !e.altKey &&
+        !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)){
+      if (!card.hidden && !usableRange()) hideCard(); else showMeaning();
+    }
+  });
+  document.addEventListener('mousedown', e => {
+    if (!card.hidden && !card.contains(e.target) && e.target !== mpop) hideCard();
+  });
+  document.querySelectorAll('.pane-passage').forEach(el => el.addEventListener('scroll', hideCard));
+
+  // ---- zoom (text size) ----
+  const ZMIN = 0.7, ZMAX = 2, ZSTEP = 0.1;
+  let zoom = 1;
+  try { const z = parseFloat(localStorage.getItem('p3-zoom')); if (z >= ZMIN && z <= ZMAX) zoom = z; } catch (_) {}
+  function setZoom(z){
+    zoom = Math.round(Math.min(ZMAX, Math.max(ZMIN, z)) * 10) / 10;
+    document.documentElement.style.setProperty('--z', zoom);
+    $('zoom-val').textContent = Math.round(zoom * 100) + '%';
+    $('zoom-out').disabled = zoom <= ZMIN;
+    $('zoom-in').disabled = zoom >= ZMAX;
+    pop.hidden = true;
+    try { localStorage.setItem('p3-zoom', zoom); } catch (_) {}
+  }
+  $('zoom-in').onclick = () => setZoom(zoom + ZSTEP);
+  $('zoom-out').onclick = () => setZoom(zoom - ZSTEP);
+  $('zoom-val').onclick = () => setZoom(1);
+  setZoom(zoom);
+
+  // warn before leaving mid-test
+  window.addEventListener('beforeunload', e => {
+    if (!submitted && ALL.some(q => getAnswer(q) !== '')) { e.preventDefault(); e.returnValue = ''; }
+  });
+
+})();
+</script>
+</body>
+</html>
