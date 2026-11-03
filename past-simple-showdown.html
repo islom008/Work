@@ -1,0 +1,398 @@
+<title>Past Simple Showdown</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@500;700;800&display=swap">
+<style>
+/* Layout: one centred game column. Setup strip on top, team scoreboard, then one big verb card that walks through ask -> answer -> sentence. */
+:root {
+  --bg: #e9f0f7;
+  --surface: #ffffff;
+  --ink: #12203a;
+  --muted: #55657f;
+  --line: #cbd8e8;
+  --accent: #2d5bff;
+  --accent-ink: #ffffff;
+  --card: #ffd23f;
+  --card-ink: #12203a;
+  --good: #0f8a47;
+  --bad: #c93a3a;
+  --t1: #2d5bff;
+  --t2: #e0457b;
+  --t3: #12a37f;
+  --t4: #e08a00;
+  --font-display: "Fredoka", "Trebuchet MS", system-ui, sans-serif;
+  --font-body: "Nunito", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1626; --surface: #17233a; --ink: #eaf0fb; --muted: #9fb0cc; --line: #2a3b5a;
+    --accent: #6b8cff; --accent-ink: #0e1626; --good: #3ccf7e; --bad: #ff7070;
+    --t1: #6b8cff; --t2: #ff7aa6; --t3: #3fd4ac; --t4: #ffb23d;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1626; --surface: #17233a; --ink: #eaf0fb; --muted: #9fb0cc; --line: #2a3b5a;
+  --accent: #6b8cff; --accent-ink: #0e1626; --good: #3ccf7e; --bad: #ff7070;
+  --t1: #6b8cff; --t2: #ff7aa6; --t3: #3fd4ac; --t4: #ffb23d;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--font-body); font-size: 16px; line-height: 1.45;
+  padding-block: 20px 40px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 760px; margin: 0 auto; display: grid; gap: 16px; }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: clamp(1.6rem, 5vw, 2.2rem); margin: 0; text-wrap: balance; line-height: 1.1; }
+.sub { margin: 4px 0 0; color: var(--muted); }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+.setup { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: end; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+.field { display: grid; gap: 6px; min-width: 0; }
+.field > span { font-size: .75rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.seg { display: inline-flex; flex-wrap: wrap; border: 2px solid var(--line); border-radius: 10px; overflow: hidden; }
+.seg button { border: 0; background: transparent; padding: 8px 12px; font-weight: 700; }
+.seg button + button { border-left: 2px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.check { display: flex; align-items: center; gap: 8px; font-weight: 700; padding-bottom: 8px; }
+.check input { width: 20px; height: 20px; accent-color: var(--accent); }
+.restart { margin-left: auto; border: 2px solid var(--line); background: transparent; border-radius: 10px; padding: 8px 14px; font-weight: 800; }
+.restart:hover { border-color: var(--accent); }
+
+.teams { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+.team { background: var(--surface); border: 2px solid var(--line); border-radius: 12px; padding: 10px 12px; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; min-width: 0; }
+.team .name { font-weight: 800; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.team .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--c); flex: none; }
+.team .pts { font-family: var(--font-display); font-weight: 700; font-size: 1.8rem; font-variant-numeric: tabular-nums; line-height: 1; }
+.team.on { border-color: var(--c); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 25%, transparent); }
+
+.stage { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: clamp(16px, 4vw, 28px); display: grid; gap: 18px; }
+.turnline { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; font-weight: 800; }
+.turnline .who { display: flex; align-items: center; gap: 8px; }
+.turnline .dot { width: 14px; height: 14px; border-radius: 50%; background: var(--c); }
+.timer { font-family: var(--font-display); font-size: 1.4rem; font-variant-numeric: tabular-nums; min-width: 3ch; text-align: right; }
+.timer.low { color: var(--bad); }
+.prompt { margin: 0; text-align: center; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; font-size: .85rem; color: var(--muted); }
+.prompt b { color: var(--ink); }
+.verbcard { background: var(--card); color: var(--card-ink); border-radius: 16px; padding: clamp(22px, 6vw, 44px) 16px; text-align: center; }
+.verbcard .big { font-family: var(--font-display); font-weight: 700; font-size: clamp(2.6rem, 14vw, 5.5rem); line-height: 1; overflow-wrap: anywhere; }
+.verbcard .tag { display: inline-block; margin-bottom: 10px; font-size: .75rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; background: var(--card-ink); color: var(--card); border-radius: 999px; padding: 3px 12px; }
+.answer { text-align: center; display: grid; gap: 8px; justify-items: center; }
+.answer .label { font-size: .8rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.answer .big { font-family: var(--font-display); font-weight: 700; font-size: clamp(2rem, 10vw, 3.6rem); line-height: 1.05; color: var(--accent); overflow-wrap: anywhere; }
+.note { margin: 0; color: var(--muted); font-weight: 700; text-align: center; }
+.example { background: var(--bg); border-radius: 12px; padding: 12px 16px; text-align: center; font-size: 1.1rem; }
+.example small { display: block; color: var(--muted); font-weight: 800; letter-spacing: .08em; text-transform: uppercase; font-size: .7rem; margin-bottom: 4px; }
+.example mark { background: var(--card); color: var(--card-ink); border-radius: 4px; padding: 0 4px; font-weight: 800; }
+.sayit { text-align: center; font-family: var(--font-display); font-weight: 600; font-size: clamp(1.2rem, 4.5vw, 1.7rem); margin: 0; }
+.sayit em { font-style: normal; color: var(--accent); }
+
+.actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+.btn { border: 2px solid transparent; border-radius: 12px; padding: 12px 20px; font-weight: 800; font-size: 1.05rem; min-height: 48px; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); }
+.btn.good { background: var(--good); color: #fff; }
+.btn.bad { background: transparent; border-color: var(--bad); color: var(--bad); }
+.btn.ghost { background: transparent; border-color: var(--line); color: var(--ink); }
+.btn:hover { filter: brightness(1.08); }
+.btn:active { transform: translateY(1px); }
+.speak { border: 2px solid var(--line); background: transparent; border-radius: 999px; padding: 6px 14px; font-weight: 800; }
+.toast { text-align: center; font-weight: 800; min-height: 1.4em; margin: 0; }
+.toast.pos { color: var(--good); }
+.foot { color: var(--muted); font-size: .85rem; text-align: center; margin: 0; }
+@media (prefers-reduced-motion: no-preference) {
+  .verbcard { animation: pop .25s ease-out; }
+  @keyframes pop { from { transform: scale(.96); opacity: .5; } to { transform: none; opacity: 1; } }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Past Simple Showdown</h1>
+    <p class="sub">A verb appears. Say the other form out loud, then use it in a sentence.</p>
+  </header>
+
+  <section class="setup" aria-label="Game settings">
+    <div class="field"><span>Verb shown</span>
+      <div class="seg" id="modeSeg" role="group" aria-label="Verb shown">
+        <button data-mode="12" aria-pressed="false">Verb 1 &rarr; say verb 2</button>
+        <button data-mode="21" aria-pressed="false">Verb 2 &rarr; say verb 1</button>
+        <button data-mode="mix" aria-pressed="true">Mixed</button>
+      </div>
+    </div>
+    <div class="field"><span>Players</span>
+      <div class="seg" id="teamSeg" role="group" aria-label="Number of teams">
+        <button data-teams="1" aria-pressed="false">Solo</button>
+        <button data-teams="2" aria-pressed="true">2 teams</button>
+        <button data-teams="3" aria-pressed="false">3</button>
+        <button data-teams="4" aria-pressed="false">4</button>
+      </div>
+    </div>
+    <label class="check"><input type="checkbox" id="timerOn" checked> 15 s timer</label>
+    <button class="restart" id="restart">New game</button>
+  </section>
+
+  <section class="teams" id="teams" aria-label="Scores"></section>
+  <section class="stage" id="stage" aria-live="polite"></section>
+  <p class="foot" id="foot"></p>
+</div>
+
+<script>
+const RAW = `be|was/were|I was tired yesterday.
+become|became|She became a doctor in 2019.
+begin|began|The lesson began at nine.
+bend|bent|He bent down to tie his shoe.
+bite|bit|The dog bit the postman.
+blow|blew|The wind blew my hat away.
+break|broke|I broke my phone last week.
+bring|brought|She brought her lunch to school.
+build|built|They built a house by the river.
+burn|burned / burnt|Dad burned the toast this morning.
+buy|bought|We bought some bread yesterday.
+can|could|I could swim when I was five.
+catch|caught|He caught the ball with one hand.
+choose|chose|She chose the blue dress.
+come|came|My cousin came to dinner on Friday.
+cost|cost|The ticket cost ten dollars.
+cut|cut|I cut my finger with a knife.
+do|did|We did our homework after school.
+draw|drew|She drew a picture of her cat.
+drink|drank|He drank a glass of water.
+drive|drove|My uncle drove us to the airport.
+eat|ate|We ate pizza last night.
+fall|fell|The boy fell off his bike.
+feel|felt|I felt sick after the party.
+fight|fought|The two brothers fought over the remote.
+find|found|She found her keys under the sofa.
+fly|flew|We flew to Istanbul last summer.
+forget|forgot|I forgot my umbrella at home.
+get|got|He got a new bike for his birthday.
+give|gave|Mum gave me a present.
+go|went|We went to the beach on Sunday.
+grow|grew|My brother grew ten centimetres this year.
+hang|hung|She hung her coat on the hook.
+have|had|I had cereal for breakfast.
+hear|heard|I heard a loud noise last night.
+hide|hid|The children hid behind the door.
+hit|hit|He hit the ball over the fence.
+keep|kept|She kept the letter for years.
+know|knew|I knew the answer.
+lay|laid|He laid the book on the table.
+lead|led|The guide led us through the forest.
+learn|learned / learnt|We learned ten new words yesterday.
+leave|left|They left the house at seven.
+lend|lent|I lent my pen to Ali.
+lose|lost|She lost her wallet on the bus.
+make|made|Grandma made a delicious cake.
+mean|meant|I didn't mean to hurt you.
+meet|met|We met our teacher at the park.
+overcome|overcame|He overcame his fear of dogs.
+pay|paid|I paid for the tickets.
+put|put|She put the milk in the fridge.
+read|read|I read a great book last week.
+ride|rode|We rode our bikes to the lake.
+ring|rang|The phone rang at midnight.
+run|ran|He ran to school because he was late.
+say|said|She said hello to everyone.
+see|saw|I saw a film on Saturday.
+sell|sold|They sold their old car.
+send|sent|He sent me a message.
+set|set|She set the table for dinner.
+shake|shook|He shook his head.
+shine|shone|The sun shone all day.
+shoot|shot|He shot the ball into the goal.
+show|showed|She showed me her photos.
+shut|shut|I shut the window because it was cold.
+sing|sang|We sang a song in class.
+sink|sank|The boat sank in the storm.
+sit|sat|He sat next to me.
+sleep|slept|I slept for ten hours.
+smell|smelled / smelt|The kitchen smelled of fresh bread.
+speak|spoke|She spoke to the manager.
+spell|spelled / spelt|He spelled his name for me.
+spend|spent|I spent all my money on games.
+spill|spilled / spilt|I spilled juice on my shirt.
+stand|stood|We stood in line for an hour.
+steal|stole|Someone stole my bike.
+swim|swam|They swam in the sea.
+take|took|He took a photo of the mountains.
+teach|taught|Ms Lee taught us English.
+tell|told|She told me a funny story.
+think|thought|I thought about you yesterday.
+throw|threw|He threw the ball to his dog.
+understand|understood|I understood the lesson.
+wake|woke|I woke up at six.
+wear|wore|She wore a red scarf.
+win|won|Our team won the match.
+write|wrote|He wrote a letter to his friend.`;
+
+const VERBS = RAW.split('\n').map(l => { const [v1, v2, ex] = l.split('|'); return { v1, v2, ex }; });
+const TEAM_COLORS = ['var(--t1)', 'var(--t2)', 'var(--t3)', 'var(--t4)'];
+const TIME = 15;
+
+const S = { mode: 'mix', n: 2, timerOn: true, deck: [], teams: [], turn: 0, cur: null, stage: 'ask', t: TIME, msg: '', pos: false };
+let tick = null;
+
+const $ = id => document.getElementById(id);
+const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+
+function highlight(ex, v2) {
+  for (const w of v2.split(/\s*\/\s*/)) {
+    const re = new RegExp('\\b' + w + '\\b', 'i');
+    if (re.test(ex)) return esc(ex).replace(re, m => '<mark>' + m + '</mark>');
+  }
+  return esc(ex);
+}
+function speak(text) {
+  try {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text.split(/\s*\/\s*/)[0]);
+    u.lang = 'en-US'; u.rate = 0.85;
+    speechSynthesis.speak(u);
+  } catch (e) {}
+}
+
+function newGame() {
+  S.deck = shuffle(VERBS);
+  S.teams = Array.from({ length: S.n }, (_, i) => ({ name: S.n === 1 ? 'Score' : 'Team ' + (i + 1), pts: 0 }));
+  S.turn = 0; S.msg = ''; S.done = 0;
+  nextCard();
+}
+function nextCard() {
+  if (!S.deck.length) S.deck = shuffle(VERBS);
+  const verb = S.deck.pop();
+  const dir = S.mode === 'mix' ? (Math.random() < 0.5 ? '12' : '21') : S.mode;
+  S.cur = { verb, dir };
+  S.stage = 'ask';
+  startTimer();
+  render();
+}
+function startTimer() {
+  clearInterval(tick);
+  S.t = TIME;
+  if (!S.timerOn) return;
+  tick = setInterval(() => {
+    if (S.stage !== 'ask') { clearInterval(tick); return; }
+    S.t = Math.max(0, S.t - 1);
+    paintTimer();
+    if (S.t === 0) clearInterval(tick);
+  }, 1000);
+}
+function paintTimer() {
+  const el = $('timer');
+  if (!el) return;
+  el.textContent = S.t + 's';
+  el.classList.toggle('low', S.t <= 5);
+}
+function endTurn() {
+  S.turn = (S.turn + 1) % S.teams.length;
+  nextCard();
+}
+function award(n) { S.teams[S.turn].pts += n; }
+
+function renderTeams() {
+  $('teams').innerHTML = S.teams.map((t, i) =>
+    `<div class="team${i === S.turn && S.teams.length > 1 ? ' on' : ''}" style="--c:${TEAM_COLORS[i]}">
+      <span class="name"><span class="dot"></span><span>${esc(t.name)}</span></span>
+      <span class="pts">${t.pts}</span></div>`).join('');
+}
+
+function render() {
+  renderTeams();
+  const { verb, dir } = S.cur;
+  const given = dir === '12' ? verb.v1 : verb.v2;
+  const ans = dir === '12' ? verb.v2 : verb.v1;
+  const givenTag = dir === '12' ? 'Verb 1 · base form' : 'Verb 2 · past simple';
+  const askTag = dir === '12' ? 'verb 2 (past simple)' : 'verb 1 (base form)';
+  const team = S.teams[S.turn];
+  const same = verb.v1 === verb.v2;
+  const who = S.teams.length > 1
+    ? `<span class="who" style="--c:${TEAM_COLORS[S.turn]}"><span class="dot"></span>${esc(team.name)}, your turn</span>`
+    : `<span class="who">Your turn</span>`;
+  const timer = S.timerOn ? `<span class="timer${S.t <= 5 ? ' low' : ''}" id="timer">${S.t}s</span>` : '<span></span>';
+  let body = '';
+
+  if (S.stage === 'ask') {
+    body = `
+      <p class="prompt">Say <b>${askTag}</b></p>
+      <div class="verbcard"><span class="tag">${givenTag}</span><div class="big">${esc(given)}</div></div>
+      <div class="actions">
+        <button class="btn primary" data-a="reveal">Show answer</button>
+        <button class="btn ghost" data-a="skip">New verb</button>
+      </div>`;
+  } else if (S.stage === 'answer') {
+    body = `
+      <div class="verbcard"><span class="tag">${givenTag}</span><div class="big">${esc(given)}</div></div>
+      <div class="answer">
+        <span class="label">${dir === '12' ? 'Verb 2' : 'Verb 1'}</span>
+        <div class="big">${esc(ans)}</div>
+        <button class="speak" data-a="speak" aria-label="Hear the answer">🔊 Listen</button>
+        ${same ? '<p class="note">Same form in the past simple.</p>' : ''}
+        ${verb.v1 === 'read' ? '<p class="note">Spelled the same. Past is pronounced “red”.</p>' : ''}
+      </div>
+      <p class="prompt">Did the student say it correctly?</p>
+      <div class="actions">
+        <button class="btn good" data-a="right">Correct +1</button>
+        <button class="btn bad" data-a="wrong">Not quite</button>
+      </div>`;
+  } else if (S.stage === 'sentence') {
+    const base = dir === '21';
+    body = `
+      <p class="sayit">Now say a sentence with <em>${esc(ans)}</em></p>
+      ${base ? '<p class="note">Any tense is fine.</p>' : ''}
+      <div class="verbcard"><div class="big">${esc(ans)}</div></div>
+      <div class="actions" id="exBox">
+        <button class="btn ghost" data-a="example">Show example</button>
+      </div>
+      <p class="prompt">Was the sentence correct?</p>
+      <div class="actions">
+        <button class="btn good" data-a="sentOk">Good sentence +1</button>
+        <button class="btn bad" data-a="sentNo">No sentence</button>
+      </div>`;
+  }
+  $('stage').innerHTML = `
+    <div class="turnline">${who}${S.stage === 'ask' ? timer : ''}</div>
+    ${body}
+    <p class="toast${S.pos ? ' pos' : ''}">${esc(S.msg)}</p>`;
+  $('foot').textContent = `${VERBS.length} irregular verbs · ${S.deck.length} left in this round`;
+}
+
+$('stage').addEventListener('click', e => {
+  const b = e.target.closest('button[data-a]');
+  if (!b) return;
+  const a = b.dataset.a;
+  const { verb, dir } = S.cur;
+  const ans = dir === '12' ? verb.v2 : verb.v1;
+  if (a === 'reveal') { S.stage = 'answer'; S.msg = ''; clearInterval(tick); render(); speak(ans); }
+  else if (a === 'skip') { S.msg = ''; nextCard(); }
+  else if (a === 'speak') speak(ans);
+  else if (a === 'right') { award(1); S.stage = 'sentence'; S.msg = '+1 for the verb. Now the sentence!'; S.pos = true; render(); }
+  else if (a === 'wrong') { S.msg = 'Not this time. Next team!'; S.pos = false; endTurn(); }
+  else if (a === 'example') {
+    $('exBox').innerHTML = `<div class="example"><small>Example (past simple)</small>${highlight(verb.ex, verb.v2)}</div>`;
+  }
+  else if (a === 'sentOk') { award(1); S.msg = 'Great sentence! +1'; S.pos = true; endTurn(); }
+  else if (a === 'sentNo') { S.msg = 'Good try. Next team!'; S.pos = false; endTurn(); }
+});
+
+$('modeSeg').addEventListener('click', e => {
+  const b = e.target.closest('button[data-mode]'); if (!b) return;
+  S.mode = b.dataset.mode; syncSetup(); newGame();
+});
+$('teamSeg').addEventListener('click', e => {
+  const b = e.target.closest('button[data-teams]'); if (!b) return;
+  S.n = +b.dataset.teams; syncSetup(); newGame();
+});
+$('timerOn').addEventListener('change', e => { S.timerOn = e.target.checked; startTimer(); render(); });
+$('restart').addEventListener('click', () => { S.msg = ''; newGame(); });
+
+function syncSetup() {
+  document.querySelectorAll('#modeSeg button').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === S.mode));
+  document.querySelectorAll('#teamSeg button').forEach(b => b.setAttribute('aria-pressed', +b.dataset.teams === S.n));
+}
+syncSetup();
+newGame();
+</script>
